@@ -26,7 +26,6 @@ export const {
   enableDebugTracing,
   skipUnmountedBoundaries,
   createRootStrictEffectsByDefault,
-  enableSuspenseLayoutEffectSemantics,
   enableUseRefAccessWarning,
   disableNativeComponentFrames,
   disableSchedulerTimeoutInWorkLoop,
@@ -47,6 +46,8 @@ export const enableProfilerNestedUpdateScheduledHook =
   __PROFILE__ && dynamicFeatureFlags.enableProfilerNestedUpdateScheduledHook;
 export const enableUpdaterTracking = __PROFILE__;
 
+export const enableSuspenseLayoutEffectSemantics = true;
+
 // Logs additional User Timing API marks for use with an experimental profiling tool.
 export const enableSchedulingProfiler =
   __PROFILE__ && dynamicFeatureFlags.enableSchedulingProfiler;
@@ -60,7 +61,7 @@ export const warnAboutDeprecatedLifecycles = true;
 export const disableLegacyContext = __EXPERIMENTAL__;
 export const warnAboutStringRefs = false;
 export const warnAboutDefaultPropsOnFunctionComponents = false;
-
+export const enableGetInspectorDataForInstanceInProduction = false;
 export const enableSuspenseServerRenderer = true;
 export const enableSelectiveHydration = true;
 
@@ -93,6 +94,8 @@ export const enableRecursiveCommitTraversal = false;
 export const allowConcurrentByDefault = true;
 
 export const deletedTreeCleanUpLevel = 3;
+
+export const enablePersistentOffscreenHostContainer = false;
 
 // Flow magic to verify the exports of this file match the original version.
 // eslint-disable-next-line no-unused-vars

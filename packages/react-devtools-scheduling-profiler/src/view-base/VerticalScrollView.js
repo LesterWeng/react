@@ -12,10 +12,12 @@ import type {
   MouseDownInteraction,
   MouseMoveInteraction,
   MouseUpInteraction,
-  WheelPlainInteraction,
+  WheelWithShiftInteraction,
 } from './useCanvasInteraction';
 import type {Rect} from './geometry';
 import type {ScrollState} from './utils/scrollState';
+import type {ViewRefs} from './Surface';
+import type {ViewState} from '../types';
 
 import {Surface} from './Surface';
 import {View} from './View';
@@ -26,15 +28,40 @@ import {
   translateState,
 } from './utils/scrollState';
 import {MOVE_WHEEL_DELTA_THRESHOLD} from './constants';
+import {COLORS} from '../content-views/constants';
+
+const CARET_MARGIN = 3;
+const CARET_WIDTH = 5;
+const CARET_HEIGHT = 3;
 
 export class VerticalScrollView extends View {
-  _scrollState: ScrollState = {offset: 0, length: 0};
-  _isPanning = false;
+  _contentView: View;
+  _isPanning: boolean;
+  _mutableViewStateKey: string;
+  _scrollState: ScrollState;
+  _viewState: ViewState;
 
-  constructor(surface: Surface, frame: Rect, contentView: View) {
+  constructor(
+    surface: Surface,
+    frame: Rect,
+    contentView: View,
+    viewState: ViewState,
+    label: string,
+  ) {
     super(surface, frame);
+
+    this._contentView = contentView;
+    this._isPanning = false;
+    this._mutableViewStateKey = label + ':VerticalScrollView';
+    this._scrollState = {
+      offset: 0,
+      length: 0,
+    };
+    this._viewState = viewState;
+
     this.addSubview(contentView);
-    this._setScrollState(this._scrollState);
+
+    this._restoreMutableViewState();
   }
 
   setFrame(newFrame: Rect) {
@@ -48,12 +75,52 @@ export class VerticalScrollView extends View {
     return this._contentView.desiredSize();
   }
 
-  /**
-   * Reference to the content view. This view is also the only view in
-   * `this.subviews`.
-   */
-  get _contentView() {
-    return this.subviews[0];
+  draw(context: CanvasRenderingContext2D, viewRefs: ViewRefs) {
+    super.draw(context, viewRefs);
+
+    // Show carets if there's scroll overflow above or below the viewable area.
+    if (this.frame.size.height > CARET_HEIGHT * 2 + CARET_MARGIN * 3) {
+      const offset = this._scrollState.offset;
+      const desiredSize = this._contentView.desiredSize();
+
+      const above = offset;
+      const below = this.frame.size.height - desiredSize.height - offset;
+
+      if (above < 0 || below < 0) {
+        const {visibleArea} = this;
+        const {x, y} = visibleArea.origin;
+        const {width, height} = visibleArea.size;
+        const horizontalCenter = x + width / 2;
+
+        const halfWidth = CARET_WIDTH;
+        const left = horizontalCenter + halfWidth;
+        const right = horizontalCenter - halfWidth;
+
+        if (above < 0) {
+          const topY = y + CARET_MARGIN;
+
+          context.beginPath();
+          context.moveTo(horizontalCenter, topY);
+          context.lineTo(left, topY + CARET_HEIGHT);
+          context.lineTo(right, topY + CARET_HEIGHT);
+          context.closePath();
+          context.fillStyle = COLORS.SCROLL_CARET;
+          context.fill();
+        }
+
+        if (below < 0) {
+          const bottomY = y + height - CARET_MARGIN;
+
+          context.beginPath();
+          context.moveTo(horizontalCenter, bottomY);
+          context.lineTo(left, bottomY - CARET_HEIGHT);
+          context.lineTo(right, bottomY - CARET_HEIGHT);
+          context.closePath();
+          context.fillStyle = COLORS.SCROLL_CARET;
+          context.fill();
+        }
+      }
+    }
   }
 
   layoutSubviews() {
@@ -77,6 +144,23 @@ export class VerticalScrollView extends View {
     };
     this._contentView.setFrame(proposedFrame);
     super.layoutSubviews();
+  }
+
+  handleInteraction(interaction: Interaction) {
+    switch (interaction.type) {
+      case 'mousedown':
+        this._handleMouseDown(interaction);
+        break;
+      case 'mousemove':
+        this._handleMouseMove(interaction);
+        break;
+      case 'mouseup':
+        this._handleMouseUp(interaction);
+        break;
+      case 'wheel-shift':
+        this._handleWheelShift(interaction);
+        break;
+    }
   }
 
   _handleMouseDown(interaction: MouseDownInteraction) {
@@ -103,7 +187,7 @@ export class VerticalScrollView extends View {
     }
   }
 
-  _handleWheelPlain(interaction: WheelPlainInteraction) {
+  _handleWheelShift(interaction: WheelWithShiftInteraction) {
     const {
       location,
       delta: {deltaX, deltaY},
@@ -130,21 +214,21 @@ export class VerticalScrollView extends View {
     this._setScrollState(newState);
   }
 
-  handleInteraction(interaction: Interaction) {
-    switch (interaction.type) {
-      case 'mousedown':
-        this._handleMouseDown(interaction);
-        break;
-      case 'mousemove':
-        this._handleMouseMove(interaction);
-        break;
-      case 'mouseup':
-        this._handleMouseUp(interaction);
-        break;
-      case 'wheel-plain':
-        this._handleWheelPlain(interaction);
-        break;
+  _restoreMutableViewState() {
+    if (
+      this._viewState.viewToMutableViewStateMap.has(this._mutableViewStateKey)
+    ) {
+      this._scrollState = ((this._viewState.viewToMutableViewStateMap.get(
+        this._mutableViewStateKey,
+      ): any): ScrollState);
+    } else {
+      this._viewState.viewToMutableViewStateMap.set(
+        this._mutableViewStateKey,
+        this._scrollState,
+      );
     }
+
+    this.setNeedsDisplay();
   }
 
   /**
@@ -158,10 +242,11 @@ export class VerticalScrollView extends View {
       maxContentLength: height,
       containerLength: this.frame.size.height,
     });
-    if (areScrollStatesEqual(clampedState, this._scrollState)) {
-      return;
+    if (!areScrollStatesEqual(clampedState, this._scrollState)) {
+      this._scrollState.offset = clampedState.offset;
+      this._scrollState.length = clampedState.length;
+
+      this.setNeedsDisplay();
     }
-    this._scrollState = clampedState;
-    this.setNeedsDisplay();
   }
 }

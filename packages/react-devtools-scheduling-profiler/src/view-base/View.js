@@ -8,8 +8,9 @@
  */
 
 import type {Interaction} from './useCanvasInteraction';
-import type {Rect, Size} from './geometry';
+import type {IntrinsicSize, Rect, Size} from './geometry';
 import type {Layouter} from './layouter';
+import type {ViewRefs} from './Surface';
 
 import {Surface} from './Surface';
 import {
@@ -28,6 +29,8 @@ import {noopLayout, viewsToLayout, collapseLayoutIntoViews} from './layouter';
  * subclasses.
  */
 export class View {
+  currentCursor: string | null = null;
+
   surface: Surface;
 
   frame: Rect;
@@ -137,7 +140,7 @@ export class View {
    *
    * Can be overridden by subclasses.
    */
-  desiredSize(): ?Size {
+  desiredSize(): Size | IntrinsicSize {
     if (this._needsDisplay) {
       this.layoutSubviews();
     }
@@ -183,7 +186,7 @@ export class View {
    * 1. Lays out subviews with `layoutSubviews`.
    * 2. Draws content with `draw`.
    */
-  displayIfNeeded(context: CanvasRenderingContext2D) {
+  displayIfNeeded(context: CanvasRenderingContext2D, viewRefs: ViewRefs) {
     if (
       (this._needsDisplay || this._subviewsNeedDisplay) &&
       rectIntersectsRect(this.frame, this.visibleArea) &&
@@ -192,7 +195,7 @@ export class View {
       this.layoutSubviews();
       if (this._needsDisplay) this._needsDisplay = false;
       if (this._subviewsNeedDisplay) this._subviewsNeedDisplay = false;
-      this.draw(context);
+      this.draw(context, viewRefs);
     }
   }
 
@@ -236,11 +239,11 @@ export class View {
    *
    * @see displayIfNeeded
    */
-  draw(context: CanvasRenderingContext2D) {
+  draw(context: CanvasRenderingContext2D, viewRefs: ViewRefs) {
     const {subviews, visibleArea} = this;
     subviews.forEach(subview => {
       if (rectIntersectsRect(visibleArea, subview.visibleArea)) {
-        subview.displayIfNeeded(context);
+        subview.displayIfNeeded(context, viewRefs);
       }
     });
   }
@@ -249,11 +252,10 @@ export class View {
    * Handle an `interaction`.
    *
    * To be overwritten by subclasses that wish to handle interactions.
+   *
+   * NOTE: Do not call directly! Use `handleInteractionAndPropagateToSubviews`
    */
-  // Internal note: Do not call directly! Use
-  // `handleInteractionAndPropagateToSubviews` so that interactions are
-  // propagated to subviews.
-  handleInteraction(interaction: Interaction) {}
+  handleInteraction(interaction: Interaction, viewRefs: ViewRefs) {}
 
   /**
    * Handle an `interaction` and propagates it to all of this view's
@@ -265,10 +267,22 @@ export class View {
    * @see handleInteraction
    * @protected
    */
-  handleInteractionAndPropagateToSubviews(interaction: Interaction) {
-    this.handleInteraction(interaction);
-    this.subviews.forEach(subview =>
-      subview.handleInteractionAndPropagateToSubviews(interaction),
-    );
+  handleInteractionAndPropagateToSubviews(
+    interaction: Interaction,
+    viewRefs: ViewRefs,
+  ) {
+    const {subviews, visibleArea} = this;
+
+    if (visibleArea.size.height === 0) {
+      return;
+    }
+
+    this.handleInteraction(interaction, viewRefs);
+
+    subviews.forEach(subview => {
+      if (rectIntersectsRect(visibleArea, subview.visibleArea)) {
+        subview.handleInteractionAndPropagateToSubviews(interaction, viewRefs);
+      }
+    });
   }
 }

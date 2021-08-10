@@ -46,7 +46,7 @@ export const disableNativeComponentFrames = false;
 export const skipUnmountedBoundaries = false;
 export const deletedTreeCleanUpLevel = 3;
 export const enableSuspenseLayoutEffectSemantics = false;
-
+export const enableGetInspectorDataForInstanceInProduction = false;
 export const enableNewReconciler = false;
 export const deferRenderPhaseUpdateToNextBatch = false;
 
@@ -59,6 +59,7 @@ export const disableSchedulerTimeoutInWorkLoop = false;
 export const enableLazyContextPropagation = false;
 export const enableSyncDefaultUpdates = true;
 export const allowConcurrentByDefault = true;
+export const enablePersistentOffscreenHostContainer = false;
 
 // Flow magic to verify the exports of this file match the original version.
 // eslint-disable-next-line no-unused-vars

@@ -10,75 +10,39 @@
 import type {Point} from './view-base';
 import type {
   FlamechartStackFrame,
-  ReactEvent,
+  NativeEvent,
+  ReactComponentMeasure,
   ReactHoverContextInfo,
   ReactMeasure,
   ReactProfilerData,
   Return,
+  SchedulingEvent,
+  SuspenseEvent,
   UserTimingMark,
 } from './types';
 
 import * as React from 'react';
-import {Fragment, useRef} from 'react';
-import prettyMilliseconds from 'pretty-ms';
-import {COLORS} from './content-views/constants';
+import {useRef} from 'react';
+import {formatDuration, formatTimestamp, trimString} from './utils/formatting';
 import {getBatchRange} from './utils/getBatchRange';
 import useSmartTooltip from './utils/useSmartTooltip';
 import styles from './EventTooltip.css';
 
 type Props = {|
+  canvasRef: {|current: HTMLCanvasElement | null|},
   data: ReactProfilerData,
   hoveredEvent: ReactHoverContextInfo | null,
   origin: Point,
 |};
 
-function formatTimestamp(ms) {
-  return ms.toLocaleString(undefined, {minimumFractionDigits: 2}) + 'ms';
-}
-
-function formatDuration(ms) {
-  return prettyMilliseconds(ms, {millisecondsDecimalDigits: 3});
-}
-
-function trimmedString(string: string, length: number): string {
-  if (string.length > length) {
-    return `${string.substr(0, length - 1)}…`;
-  }
-  return string;
-}
-
-function getReactEventLabel(type): string | null {
-  switch (type) {
+function getSchedulingEventLabel(event: SchedulingEvent): string | null {
+  switch (event.type) {
     case 'schedule-render':
       return 'render scheduled';
     case 'schedule-state-update':
       return 'state update scheduled';
     case 'schedule-force-update':
       return 'force update scheduled';
-    case 'suspense-suspend':
-      return 'suspended';
-    case 'suspense-resolved':
-      return 'suspense resolved';
-    case 'suspense-rejected':
-      return 'suspense rejected';
-    default:
-      return null;
-  }
-}
-
-function getReactEventColor(event: ReactEvent): string | null {
-  switch (event.type) {
-    case 'schedule-render':
-      return COLORS.REACT_SCHEDULE_HOVER;
-    case 'schedule-state-update':
-    case 'schedule-force-update':
-      return event.isCascading
-        ? COLORS.REACT_SCHEDULE_CASCADING_HOVER
-        : COLORS.REACT_SCHEDULE_HOVER;
-    case 'suspense-suspend':
-    case 'suspense-resolved':
-    case 'suspense-rejected':
-      return COLORS.REACT_SUSPEND_HOVER;
     default:
       return null;
   }
@@ -87,22 +51,28 @@ function getReactEventColor(event: ReactEvent): string | null {
 function getReactMeasureLabel(type): string | null {
   switch (type) {
     case 'commit':
-      return 'commit';
+      return 'react commit';
     case 'render-idle':
-      return 'idle';
+      return 'react idle';
     case 'render':
-      return 'render';
+      return 'react render';
     case 'layout-effects':
-      return 'layout effects';
+      return 'react layout effects';
     case 'passive-effects':
-      return 'passive effects';
+      return 'react passive effects';
     default:
       return null;
   }
 }
 
-export default function EventTooltip({data, hoveredEvent, origin}: Props) {
+export default function EventTooltip({
+  canvasRef,
+  data,
+  hoveredEvent,
+  origin,
+}: Props) {
   const tooltipRef = useSmartTooltip({
+    canvasRef,
     mouseX: origin.x,
     mouseY: origin.y,
   });
@@ -111,10 +81,42 @@ export default function EventTooltip({data, hoveredEvent, origin}: Props) {
     return null;
   }
 
-  const {event, measure, flamechartStackFrame, userTimingMark} = hoveredEvent;
+  const {
+    componentMeasure,
+    flamechartStackFrame,
+    measure,
+    nativeEvent,
+    schedulingEvent,
+    suspenseEvent,
+    userTimingMark,
+  } = hoveredEvent;
 
-  if (event !== null) {
-    return <TooltipReactEvent event={event} tooltipRef={tooltipRef} />;
+  if (componentMeasure !== null) {
+    return (
+      <TooltipReactComponentMeasure
+        componentMeasure={componentMeasure}
+        tooltipRef={tooltipRef}
+      />
+    );
+  } else if (nativeEvent !== null) {
+    return (
+      <TooltipNativeEvent nativeEvent={nativeEvent} tooltipRef={tooltipRef} />
+    );
+  } else if (schedulingEvent !== null) {
+    return (
+      <TooltipSchedulingEvent
+        data={data}
+        schedulingEvent={schedulingEvent}
+        tooltipRef={tooltipRef}
+      />
+    );
+  } else if (suspenseEvent !== null) {
+    return (
+      <TooltipSuspenseEvent
+        suspenseEvent={suspenseEvent}
+        tooltipRef={tooltipRef}
+      />
+    );
   } else if (measure !== null) {
     return (
       <TooltipReactMeasure
@@ -138,15 +140,37 @@ export default function EventTooltip({data, hoveredEvent, origin}: Props) {
   return null;
 }
 
-function formatComponentStack(componentStack: string): string {
-  const lines = componentStack.split('\n').map(line => line.trim());
-  lines.shift();
+const TooltipReactComponentMeasure = ({
+  componentMeasure,
+  tooltipRef,
+}: {
+  componentMeasure: ReactComponentMeasure,
+  tooltipRef: Return<typeof useRef>,
+}) => {
+  const {componentName, duration, timestamp, warning} = componentMeasure;
 
-  if (lines.length > 5) {
-    return lines.slice(0, 5).join('\n') + '\n...';
-  }
-  return lines.join('\n');
-}
+  const label = `${componentName} rendered`;
+
+  return (
+    <div className={styles.Tooltip} ref={tooltipRef}>
+      <div className={styles.TooltipSection}>
+        {trimString(label, 768)}
+        <div className={styles.Divider} />
+        <div className={styles.DetailsGrid}>
+          <div className={styles.DetailsGridLabel}>Timestamp:</div>
+          <div>{formatTimestamp(timestamp)}</div>
+          <div className={styles.DetailsGridLabel}>Duration:</div>
+          <div>{formatDuration(duration)}</div>
+        </div>
+      </div>
+      {warning !== null && (
+        <div className={styles.TooltipWarningSection}>
+          <div className={styles.WarningText}>{warning}</div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const TooltipFlamechartNode = ({
   stackFrame,
@@ -155,79 +179,177 @@ const TooltipFlamechartNode = ({
   stackFrame: FlamechartStackFrame,
   tooltipRef: Return<typeof useRef>,
 }) => {
-  const {
-    name,
-    timestamp,
-    duration,
-    scriptUrl,
-    locationLine,
-    locationColumn,
-  } = stackFrame;
+  const {name, timestamp, duration, locationLine, locationColumn} = stackFrame;
   return (
     <div className={styles.Tooltip} ref={tooltipRef}>
-      {formatDuration(duration)}
-      <span className={styles.FlamechartStackFrameName}>{name}</span>
-      <div className={styles.DetailsGrid}>
-        <div className={styles.DetailsGridLabel}>Timestamp:</div>
-        <div>{formatTimestamp(timestamp)}</div>
-        {scriptUrl && (
-          <>
-            <div className={styles.DetailsGridLabel}>Script URL:</div>
-            <div className={styles.DetailsGridURL}>{scriptUrl}</div>
-          </>
-        )}
-        {(locationLine !== undefined || locationColumn !== undefined) && (
-          <>
-            <div className={styles.DetailsGridLabel}>Location:</div>
-            <div>
-              line {locationLine}, column {locationColumn}
-            </div>
-          </>
-        )}
+      <div className={styles.TooltipSection}>
+        <span className={styles.FlamechartStackFrameName}>{name}</span>
+        <div className={styles.DetailsGrid}>
+          <div className={styles.DetailsGridLabel}>Timestamp:</div>
+          <div>{formatTimestamp(timestamp)}</div>
+          <div className={styles.DetailsGridLabel}>Duration:</div>
+          <div>{formatDuration(duration)}</div>
+          {(locationLine !== undefined || locationColumn !== undefined) && (
+            <>
+              <div className={styles.DetailsGridLabel}>Location:</div>
+              <div>
+                line {locationLine}, column {locationColumn}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
-const TooltipReactEvent = ({
-  event,
+const TooltipNativeEvent = ({
+  nativeEvent,
   tooltipRef,
 }: {
-  event: ReactEvent,
+  nativeEvent: NativeEvent,
   tooltipRef: Return<typeof useRef>,
 }) => {
-  const label = getReactEventLabel(event.type);
-  const color = getReactEventColor(event);
-  if (!label || !color) {
+  const {duration, timestamp, type, warning} = nativeEvent;
+
+  return (
+    <div className={styles.Tooltip} ref={tooltipRef}>
+      <div className={styles.TooltipSection}>
+        <span className={styles.NativeEventName}>{trimString(type, 768)}</span>
+        event
+        <div className={styles.Divider} />
+        <div className={styles.DetailsGrid}>
+          <div className={styles.DetailsGridLabel}>Timestamp:</div>
+          <div>{formatTimestamp(timestamp)}</div>
+          <div className={styles.DetailsGridLabel}>Duration:</div>
+          <div>{formatDuration(duration)}</div>
+        </div>
+      </div>
+      {warning !== null && (
+        <div className={styles.TooltipWarningSection}>
+          <div className={styles.WarningText}>{warning}</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TooltipSchedulingEvent = ({
+  data,
+  schedulingEvent,
+  tooltipRef,
+}: {
+  data: ReactProfilerData,
+  schedulingEvent: SchedulingEvent,
+  tooltipRef: Return<typeof useRef>,
+}) => {
+  const label = getSchedulingEventLabel(schedulingEvent);
+  if (!label) {
     if (__DEV__) {
-      console.warn('Unexpected event type "%s"', event.type);
+      console.warn(
+        'Unexpected schedulingEvent type "%s"',
+        schedulingEvent.type,
+      );
     }
     return null;
   }
 
-  const {componentName, componentStack, timestamp} = event;
+  let laneLabels = null;
+  let lanes = null;
+  switch (schedulingEvent.type) {
+    case 'schedule-render':
+    case 'schedule-state-update':
+    case 'schedule-force-update':
+      lanes = schedulingEvent.lanes;
+      laneLabels = lanes.map(
+        lane => ((data.laneToLabelMap.get(lane): any): string),
+      );
+      break;
+  }
+
+  const {componentName, timestamp, warning} = schedulingEvent;
 
   return (
     <div className={styles.Tooltip} ref={tooltipRef}>
-      {componentName && (
-        <span className={styles.ComponentName} style={{color}}>
-          {trimmedString(componentName, 768)}
-        </span>
-      )}
-      {label}
-      <div className={styles.Divider} />
-      <div className={styles.DetailsGrid}>
-        <div className={styles.DetailsGridLabel}>Timestamp:</div>
-        <div>{formatTimestamp(timestamp)}</div>
-        {componentStack && (
-          <Fragment>
-            <div className={styles.DetailsGridLabel}>Component stack:</div>
-            <pre className={styles.ComponentStack}>
-              {formatComponentStack(componentStack)}
-            </pre>
-          </Fragment>
+      <div className={styles.TooltipSection}>
+        {componentName && (
+          <span className={styles.ComponentName}>
+            {trimString(componentName, 100)}
+          </span>
         )}
+        {label}
+        <div className={styles.Divider} />
+        <div className={styles.DetailsGrid}>
+          {laneLabels !== null && lanes !== null && (
+            <>
+              <div className={styles.DetailsGridLabel}>Lanes:</div>
+              <div>
+                {laneLabels.join(', ')} ({lanes.join(', ')})
+              </div>
+            </>
+          )}
+          <div className={styles.DetailsGridLabel}>Timestamp:</div>
+          <div>{formatTimestamp(timestamp)}</div>
+        </div>
       </div>
+      {warning !== null && (
+        <div className={styles.TooltipWarningSection}>
+          <div className={styles.WarningText}>{warning}</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TooltipSuspenseEvent = ({
+  suspenseEvent,
+  tooltipRef,
+}: {
+  suspenseEvent: SuspenseEvent,
+  tooltipRef: Return<typeof useRef>,
+}) => {
+  const {
+    componentName,
+    duration,
+    phase,
+    resolution,
+    timestamp,
+    warning,
+  } = suspenseEvent;
+
+  let label = 'suspended';
+  if (phase !== null) {
+    label += ` during ${phase}`;
+  }
+
+  return (
+    <div className={styles.Tooltip} ref={tooltipRef}>
+      <div className={styles.TooltipSection}>
+        {componentName && (
+          <span className={styles.ComponentName}>
+            {trimString(componentName, 100)}
+          </span>
+        )}
+        {label}
+        <div className={styles.Divider} />
+        <div className={styles.DetailsGrid}>
+          <div className={styles.DetailsGridLabel}>Status:</div>
+          <div>{resolution}</div>
+          <div className={styles.DetailsGridLabel}>Timestamp:</div>
+          <div>{formatTimestamp(timestamp)}</div>
+          {duration !== null && (
+            <>
+              <div className={styles.DetailsGridLabel}>Duration:</div>
+              <div>{formatDuration(duration)}</div>
+            </>
+          )}
+        </div>
+      </div>
+      {warning !== null && (
+        <div className={styles.TooltipWarningSection}>
+          <div className={styles.WarningText}>{warning}</div>
+        </div>
+      )}
     </div>
   );
 };
@@ -249,26 +371,37 @@ const TooltipReactMeasure = ({
     return null;
   }
 
-  const {batchUID, duration, timestamp, lanes, laneLabels} = measure;
+  const {batchUID, duration, timestamp, lanes} = measure;
   const [startTime, stopTime] = getBatchRange(batchUID, data);
+
+  const laneLabels = lanes.map(
+    lane => ((data.laneToLabelMap.get(lane): any): string),
+  );
 
   return (
     <div className={styles.Tooltip} ref={tooltipRef}>
-      {formatDuration(duration)}
-      <span className={styles.ReactMeasureLabel}>{label}</span>
-      <div className={styles.Divider} />
-      <div className={styles.DetailsGrid}>
-        <div className={styles.DetailsGridLabel}>Timestamp:</div>
-        <div>{formatTimestamp(timestamp)}</div>
-        <div className={styles.DetailsGridLabel}>Batch duration:</div>
-        <div>{formatDuration(stopTime - startTime)}</div>
-        <div className={styles.DetailsGridLabel}>
-          Lane{lanes.length === 1 ? '' : 's'}:
-        </div>
-        <div>
-          {laneLabels.length > 0
-            ? `${laneLabels.join(', ')} (${lanes.join(', ')})`
-            : lanes.join(', ')}
+      <div className={styles.TooltipSection}>
+        <span className={styles.ReactMeasureLabel}>{label}</span>
+        <div className={styles.Divider} />
+        <div className={styles.DetailsGrid}>
+          <div className={styles.DetailsGridLabel}>Timestamp:</div>
+          <div>{formatTimestamp(timestamp)}</div>
+          {measure.type !== 'render-idle' && (
+            <>
+              <div className={styles.DetailsGridLabel}>Duration:</div>
+              <div>{formatDuration(duration)}</div>
+            </>
+          )}
+          <div className={styles.DetailsGridLabel}>Batch duration:</div>
+          <div>{formatDuration(stopTime - startTime)}</div>
+          <div className={styles.DetailsGridLabel}>
+            Lane{lanes.length === 1 ? '' : 's'}:
+          </div>
+          <div>
+            {laneLabels.length > 0
+              ? `${laneLabels.join(', ')} (${lanes.join(', ')})`
+              : lanes.join(', ')}
+          </div>
         </div>
       </div>
     </div>
@@ -285,11 +418,13 @@ const TooltipUserTimingMark = ({
   const {name, timestamp} = mark;
   return (
     <div className={styles.Tooltip} ref={tooltipRef}>
-      <span className={styles.UserTimingLabel}>{name}</span>
-      <div className={styles.Divider} />
-      <div className={styles.DetailsGrid}>
-        <div className={styles.DetailsGridLabel}>Timestamp:</div>
-        <div>{formatTimestamp(timestamp)}</div>
+      <div className={styles.TooltipSection}>
+        <span className={styles.UserTimingLabel}>{name}</span>
+        <div className={styles.Divider} />
+        <div className={styles.DetailsGrid}>
+          <div className={styles.DetailsGridLabel}>Timestamp:</div>
+          <div>{formatTimestamp(timestamp)}</div>
+        </div>
       </div>
     </div>
   );

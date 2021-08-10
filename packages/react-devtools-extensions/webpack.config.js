@@ -19,6 +19,15 @@ const DEVTOOLS_VERSION = getVersionString();
 
 const featureFlagTarget = process.env.FEATURE_FLAG_TARGET || 'extension-oss';
 
+const babelOptions = {
+  configFile: resolve(
+    __dirname,
+    '..',
+    'react-devtools-shared',
+    'babel.config.js',
+  ),
+};
+
 module.exports = {
   mode: __DEV__ ? 'development' : 'production',
   devtool: __DEV__ ? 'cheap-module-eval-source-map' : false,
@@ -37,6 +46,10 @@ module.exports = {
   node: {
     // Don't define a polyfill on window.setImmediate
     setImmediate: false,
+
+    // source-maps package has a dependency on 'fs'
+    // but this build won't trigger that code path
+    fs: 'empty',
   },
   resolve: {
     alias: {
@@ -65,18 +78,37 @@ module.exports = {
     }),
   ],
   module: {
+    defaultRules: [
+      {
+        type: 'javascript/auto',
+        resolve: {},
+      },
+      {
+        test: /\.json$/i,
+        type: 'json',
+      },
+    ],
+
     rules: [
+      {
+        test: /\.worker\.js$/,
+        use: [
+          {
+            loader: 'workerize-loader',
+            options: {
+              inline: true,
+            },
+          },
+          {
+            loader: 'babel-loader',
+            options: babelOptions,
+          },
+        ],
+      },
       {
         test: /\.js$/,
         loader: 'babel-loader',
-        options: {
-          configFile: resolve(
-            __dirname,
-            '..',
-            'react-devtools-shared',
-            'babel.config.js',
-          ),
-        },
+        options: babelOptions,
       },
       {
         test: /\.css$/,

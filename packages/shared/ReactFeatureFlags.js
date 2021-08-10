@@ -17,7 +17,7 @@ export const enableDebugTracing = false;
 
 // Adds user timing marks for e.g. state updates, suspense, and work loop stuff,
 // for an experimental scheduling profiler tool.
-export const enableSchedulingProfiler = __PROFILE__ && __EXPERIMENTAL__;
+export const enableSchedulingProfiler = __PROFILE__;
 
 // Helps identify side effects in render-phase lifecycle hooks and setState
 // reducers by double invoking them in StrictLegacyMode.
@@ -105,6 +105,9 @@ export const enableNewReconciler = false;
 
 export const disableNativeComponentFrames = false;
 
+// Internal only.
+export const enableGetInspectorDataForInstanceInProduction = false;
+
 // Errors that are thrown while unmounting (or after in the case of passive effects)
 // should bypass any error boundaries that are also unmounting (or have unmounted)
 // and be handled by the nearest still-mounted boundary.
@@ -170,3 +173,5 @@ export const enableLazyContextPropagation = false;
 export const enableSyncDefaultUpdates = true;
 
 export const allowConcurrentByDefault = false;
+
+export const enablePersistentOffscreenHostContainer = false;

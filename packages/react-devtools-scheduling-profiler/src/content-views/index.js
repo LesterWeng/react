@@ -7,8 +7,11 @@
  * @flow
  */
 
+export * from './ComponentMeasuresView';
 export * from './FlamechartView';
-export * from './ReactEventsView';
+export * from './NativeEventsView';
 export * from './ReactMeasuresView';
+export * from './SchedulingEventsView';
+export * from './SuspenseEventsView';
 export * from './TimeAxisMarkersView';
 export * from './UserTimingMarksView';

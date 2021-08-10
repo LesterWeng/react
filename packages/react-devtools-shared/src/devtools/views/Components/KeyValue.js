@@ -24,6 +24,7 @@ import styles from './KeyValue.css';
 import Button from 'react-devtools-shared/src/devtools/views/Button';
 import ButtonIcon from 'react-devtools-shared/src/devtools/views/ButtonIcon';
 import {InspectedElementContext} from './InspectedElementContext';
+import {PROTOCOLS_SUPPORTED_AS_LINKS_IN_KEY_VALUE} from './constants';
 
 import type {InspectedElement} from './types';
 import type {Element} from 'react-devtools-shared/src/devtools/views/Components/types';
@@ -43,6 +44,7 @@ type KeyValueProps = {|
   element: Element,
   hidden: boolean,
   hookID?: ?number,
+  hookName?: ?string,
   inspectedElement: InspectedElement,
   isDirectChildOfAnArray?: boolean,
   name: string,
@@ -65,6 +67,7 @@ export default function KeyValue({
   isDirectChildOfAnArray,
   hidden,
   hookID,
+  hookName,
   name,
   path,
   pathRoot,
@@ -202,7 +205,12 @@ export default function KeyValue({
         <DeleteToggle name={name} deletePath={deletePath} path={path} />
       );
     } else {
-      renderedName = <span className={styles.Name}>{name}</span>;
+      renderedName = (
+        <span className={styles.Name}>
+          {name}
+          {!!hookName && <span className={styles.HookName}>({hookName})</span>}
+        </span>
+      );
     }
   } else if (canRenameTheCurrentPath) {
     renderedName = (
@@ -215,7 +223,12 @@ export default function KeyValue({
       />
     );
   } else {
-    renderedName = <span className={styles.Name}>{name}</span>;
+    renderedName = (
+      <span className={styles.Name}>
+        {name}
+        {!!hookName && <span className={styles.HookName}>({hookName})</span>}
+      </span>
+    );
   }
 
   let children = null;
@@ -229,6 +242,16 @@ export default function KeyValue({
       displayValue = 'null';
     } else if (value === undefined) {
       displayValue = 'undefined';
+    }
+
+    let shouldDisplayValueAsLink = false;
+    if (
+      dataType === 'string' &&
+      PROTOCOLS_SUPPORTED_AS_LINKS_IN_KEY_VALUE.some(protocolPrefix =>
+        value.startsWith(protocolPrefix),
+      )
+    ) {
+      shouldDisplayValueAsLink = true;
     }
 
     children = (
@@ -247,6 +270,14 @@ export default function KeyValue({
             path={path}
             value={value}
           />
+        ) : shouldDisplayValueAsLink ? (
+          <a
+            className={styles.Link}
+            href={value}
+            target="_blank"
+            rel="noopener noreferrer">
+            {displayValue}
+          </a>
         ) : (
           <span className={styles.Value}>{displayValue}</span>
         )}
