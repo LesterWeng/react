@@ -3,15 +3,14 @@
 }
 
 .TooltipSection,
-.TooltipWarningSection {
+.TooltipWarningSection,
+.SingleLineTextSection {
   display: block;
   border-radius: 0.125rem;
-  max-width: 300px;
   padding: 0.25rem;
   user-select: none;
   pointer-events: none;
   background-color: var(--color-tooltip-background);
-  border: 1px solid var(border);
   box-shadow: 1px 1px 2px var(--color-shadow);
   color: var(--color-tooltip-text);
   font-size: 11px;
@@ -19,6 +18,13 @@
 .TooltipWarningSection {
   margin-top: 0.25rem;
   background-color: var(--color-warning-background);
+}
+.TooltipSection,
+.TooltipWarningSection {
+  max-width: 300px;
+}
+.SingleLineTextSection {
+  white-space: nowrap;
 }
 
 .Divider {
@@ -72,4 +78,12 @@
 .InfoText,
 .WarningText {
   color: var(--color-warning-text-color);
+}
+
+.Image {
+  border: 1px solid var(--color-border);
+}
+
+.DimText {
+  color: var(--color-dim);
 }
