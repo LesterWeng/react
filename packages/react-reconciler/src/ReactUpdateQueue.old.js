@@ -164,6 +164,7 @@ if (__DEV__) {
 }
 
 export function initializeUpdateQueue<State>(fiber: Fiber): void {
+  // STRUCT:(ClassComponent、HostRoot updateQueue)
   const queue: UpdateQueue<State> = {
     baseState: fiber.memoizedState,
     firstBaseUpdate: null,
@@ -639,9 +640,9 @@ export function processUpdateQueue<State>(
       queue.shared.lanes = NoLanes;
     }
 
-    // Set the remaining lanes to be whatever is remaining in the queue.
+    // Set the remaining expiration time to be whatever is remaining in the queue.
     // This should be fine because the only two other things that contribute to
-    // lanes are props and context. We're already in the middle of the
+    // expiration time are props and context. We're already in the middle of the
     // begin phase by the time we start processing the queue, so we've already
     // dealt with the props. Context in components that specify
     // shouldComponentUpdate is tricky; but we'll have to account for

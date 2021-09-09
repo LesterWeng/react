@@ -9,6 +9,7 @@
 
 export type HookFlags = number;
 
+// STRUCT:(HookEffectTags)
 export const NoFlags = /*  */ 0b000;
 
 // Represents whether effect should fire.

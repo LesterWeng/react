@@ -16,6 +16,7 @@ import {
 } from './ReactEventPriorities.old';
 import {ImmediatePriority, scheduleCallback} from './Scheduler';
 
+// STRUCT:(Scheduler:同步模式下使用的一般队列)
 let syncQueue: Array<SchedulerCallback> | null = null;
 let includesLegacySyncCallbacks: boolean = false;
 let isFlushingSyncQueue: boolean = false;
@@ -48,6 +49,7 @@ export function flushSyncCallbacksOnlyInLegacyMode() {
   }
 }
 
+// PHASE:(Scheduler:同步模式下使用的调度)
 export function flushSyncCallbacks() {
   if (!isFlushingSyncQueue && syncQueue !== null) {
     // Prevent re-entrancy.

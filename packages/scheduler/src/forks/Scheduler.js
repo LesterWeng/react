@@ -65,6 +65,8 @@ var LOW_PRIORITY_TIMEOUT = 10000;
 // Never times out
 var IDLE_PRIORITY_TIMEOUT = maxSigned31BitInt;
 
+// STRUCT:(Scheduler:并发模式下使用的优先队列-最小堆和延时队列)
+// RECORD:timerQueue相关的API：Suspense、SuspenseList、useTransition、useDeferredValue
 // Tasks are stored on a min heap
 var taskQueue = [];
 var timerQueue = [];
@@ -141,6 +143,7 @@ function handleTimeout(currentTime) {
   }
 }
 
+// PHASE:(Scheduler:flushWork)
 function flushWork(hasTimeRemaining, initialTime) {
   if (enableProfiling) {
     markSchedulerUnsuspended(initialTime);
@@ -154,6 +157,7 @@ function flushWork(hasTimeRemaining, initialTime) {
     cancelHostTimeout();
   }
 
+  // RECORD:表示处于flushWork过程中
   isPerformingWork = true;
   const previousPriorityLevel = currentPriorityLevel;
   try {
@@ -183,6 +187,7 @@ function flushWork(hasTimeRemaining, initialTime) {
   }
 }
 
+// PHASE:(Scheduler:workLoop)
 function workLoop(hasTimeRemaining, initialTime) {
   let currentTime = initialTime;
   advanceTimers(currentTime);
@@ -302,6 +307,7 @@ function unstable_wrapCallback(callback) {
   };
 }
 
+// PHASE:(Scheduler:unstable_scheduleCallback)
 function unstable_scheduleCallback(priorityLevel, callback, options) {
   var currentTime = getCurrentTime();
 
@@ -435,6 +441,7 @@ let startTime = -1;
 
 let needsPaint = false;
 
+// PHASE:(Scheduler:shouldYieldToHost)
 function shouldYieldToHost() {
   const timeElapsed = getCurrentTime() - startTime;
   if (timeElapsed < frameInterval) {
@@ -510,6 +517,7 @@ function forceFrameRate(fps) {
   }
 }
 
+// PHASE:(SchedulerperformWorkUntilDeadline)
 const performWorkUntilDeadline = () => {
   if (scheduledHostCallback !== null) {
     const currentTime = getCurrentTime();
@@ -577,6 +585,7 @@ if (typeof localSetImmediate === 'function') {
   };
 }
 
+// PHASE:(Scheduler:requestHostCallback)
 function requestHostCallback(callback) {
   scheduledHostCallback = callback;
   if (!isMessageLoopRunning) {

@@ -301,6 +301,7 @@ function throwInvalidHookError() {
   );
 }
 
+// FEATURE:(areHookInputsEqual，hook deps对比)
 function areHookInputsEqual(
   nextDeps: Array<mixed>,
   prevDeps: Array<mixed> | null,
@@ -347,7 +348,7 @@ function areHookInputsEqual(
   }
   return true;
 }
-
+// CHILDPHASE:(renderWithHooks)
 export function renderWithHooks<Props, SecondArg>(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -401,6 +402,7 @@ export function renderWithHooks<Props, SecondArg>(
       ReactCurrentDispatcher.current = HooksDispatcherOnMountInDEV;
     }
   } else {
+    // CHILDPHASE:(更换mount/update Hook)
     ReactCurrentDispatcher.current =
       current === null || current.memoizedState === null
         ? HooksDispatcherOnMount
@@ -409,6 +411,7 @@ export function renderWithHooks<Props, SecondArg>(
 
   let children = Component(props, secondArg);
 
+  // CHILDPHASE:(render阶段触发的更新，如写在useEffect内的setState等)
   // Check if there was a render phase update
   if (didScheduleRenderPhaseUpdateDuringThisPass) {
     // Keep rendering in a loop for as long as render phase updates continue to
@@ -594,11 +597,14 @@ export function resetHooksAfterThrow(): void {
   didScheduleRenderPhaseUpdateDuringThisPass = false;
 }
 
+// CHILDPHASE:(mountWorkInProgressHook)
 function mountWorkInProgressHook(): Hook {
+  // STRUCT:(hook，位于fiberNode.memoizedState，单链表)
   const hook: Hook = {
     memoizedState: null,
 
     baseState: null,
+    // RECORD:baseQueue为之前render阶段由于优先级过低而未处理的update
     baseQueue: null,
     queue: null,
 
@@ -615,6 +621,7 @@ function mountWorkInProgressHook(): Hook {
   return workInProgressHook;
 }
 
+// CHILDPHASE:(updateWorkInProgressHook，沿着单向链表获取当前hook)
 function updateWorkInProgressHook(): Hook {
   // This function is used both for updates and for re-renders triggered by a
   // render phase update. It assumes there is either a current hook we can
@@ -622,6 +629,8 @@ function updateWorkInProgressHook(): Hook {
   // use as a base. When we reach the end of the base list, we must switch to
   // the dispatcher used for mounts.
   let nextCurrentHook: null | Hook;
+
+  // RECORD:组件内首个hook的currentHook为null
   if (currentHook === null) {
     const current = currentlyRenderingFiber.alternate;
     if (current !== null) {
@@ -676,6 +685,7 @@ function updateWorkInProgressHook(): Hook {
   return workInProgressHook;
 }
 
+// STRUCT:(functionComponent updateQueue，存放useEffect数据)
 function createFunctionComponentUpdateQueue(): FunctionComponentUpdateQueue {
   return {
     lastEffect: null,
@@ -715,7 +725,7 @@ function mountReducer<S, I, A>(
   ): any));
   return [hook.memoizedState, dispatch];
 }
-
+//CHILDPHASE:(updateState, updateReducer，dispatchAction后renderRootSync再次执行updateReducer时才会根据baseQueue更新memoizedState)
 function updateReducer<S, I, A>(
   reducer: (S, A) => S,
   initialArg: I,
@@ -835,6 +845,7 @@ function updateReducer<S, I, A>(
 
     // Mark that the fiber performed work, but only if the new state is
     // different from the current state.
+    // RECORD:执行Comp()时比较state，标记didReceiveUpdate
     if (!is(newState, hook.memoizedState)) {
       markWorkInProgressReceivedUpdate();
     }
@@ -1144,7 +1155,7 @@ function useMutableSource<Source, Snapshot>(
       try {
         latestSetSnapshot(latestGetSnapshot(source._source));
 
-        // Record a pending mutable source update with the same lane.
+        // Record a pending mutable source update with the same expiration time.
         const lane = requestUpdateLane(fiber);
 
         markRootMutableRead(root, lane);
@@ -1241,6 +1252,7 @@ function updateMutableSource<Source, Snapshot>(
   return useMutableSource(hook, source, getSnapshot, subscribe);
 }
 
+//CHILDPHASE:(mountState)
 function mountState<S>(
   initialState: (() => S) | S,
 ): [S, Dispatch<BasicStateAction<S>>] {
@@ -1267,7 +1279,6 @@ function mountState<S>(
   ): any));
   return [hook.memoizedState, dispatch];
 }
-
 function updateState<S>(
   initialState: (() => S) | S,
 ): [S, Dispatch<BasicStateAction<S>>] {
@@ -1280,7 +1291,9 @@ function rerenderState<S>(
   return rerenderReducer(basicStateReducer, (initialState: any));
 }
 
+// CHILDPHASE:(pushEffect)
 function pushEffect(tag, create, destroy, deps) {
+  // STRUCT:(effect，updateQueue.lastEffect环形链表，和hook.queue.pending环形链表相同)
   const effect: Effect = {
     tag,
     create,
@@ -1292,6 +1305,7 @@ function pushEffect(tag, create, destroy, deps) {
   let componentUpdateQueue: null | FunctionComponentUpdateQueue = (currentlyRenderingFiber.updateQueue: any);
   if (componentUpdateQueue === null) {
     componentUpdateQueue = createFunctionComponentUpdateQueue();
+    // QUESTION:(updateQueue.lastEffect是环形链表，那么为什么组件中useEffect回调是按顺序执行的呢？)
     currentlyRenderingFiber.updateQueue = (componentUpdateQueue: any);
     componentUpdateQueue.lastEffect = effect.next = effect;
   } else {
@@ -1324,6 +1338,7 @@ function getCallerStackFrame(): string {
     : stackFrames.slice(2, 3).join('\n');
 }
 
+// CHILDPHASE:(mountRef)
 function mountRef<T>(initialValue: T): {|current: T|} {
   const hook = mountWorkInProgressHook();
   if (enableUseRefAccessWarning) {
@@ -1400,7 +1415,7 @@ function updateRef<T>(initialValue: T): {|current: T|} {
   const hook = updateWorkInProgressHook();
   return hook.memoizedState;
 }
-
+// CHILDPHASE:(mountEffect)
 function mountEffectImpl(fiberFlags, hookFlags, create, deps): void {
   const hook = mountWorkInProgressHook();
   const nextDeps = deps === undefined ? null : deps;
@@ -1412,7 +1427,7 @@ function mountEffectImpl(fiberFlags, hookFlags, create, deps): void {
     nextDeps,
   );
 }
-
+// CHILDPHASE:(updateEffect)
 function updateEffectImpl(fiberFlags, hookFlags, create, deps): void {
   const hook = updateWorkInProgressHook();
   const nextDeps = deps === undefined ? null : deps;
@@ -1635,6 +1650,7 @@ function updateCallback<T>(callback: T, deps: Array<mixed> | void | null): T {
   return callback;
 }
 
+// CHILDPHASE:(mountMemo)
 function mountMemo<T>(
   nextCreate: () => T,
   deps: Array<mixed> | void | null,
@@ -1709,6 +1725,7 @@ function rerenderDeferredValue<T>(value: T): T {
   return prevValue;
 }
 
+// CHILDPHASE:(startTransition)
 function startTransition(setPending, callback) {
   const previousPriority = getCurrentUpdatePriority();
   setCurrentUpdatePriority(
@@ -1898,6 +1915,7 @@ function refreshCache<T>(fiber: Fiber, seedKey: ?() => T, seedValue: T) {
   // TODO: Warn if unmounted?
 }
 
+//CHILDPHASE:(dispatchAction，这里bind的fiber无法改变，因此双缓存切换时只能修改对象属性而不能新建对象)
 function dispatchAction<S, A>(
   fiber: Fiber,
   queue: UpdateQueue<S, A>,
@@ -1914,8 +1932,10 @@ function dispatchAction<S, A>(
   }
 
   const eventTime = requestEventTime();
+  // RECORD:获取更新lane（同步模式下就是1）
   const lane = requestUpdateLane(fiber);
 
+  // STRUCT:(update，位于hook.queue.pending，环形链表)
   const update: Update<S, A> = {
     lane,
     action,
@@ -2013,6 +2033,7 @@ function dispatchAction<S, A>(
         warnIfNotCurrentlyActingUpdatesInDev(fiber);
       }
     }
+    // RECORD:(这里的fiber只是两个fiber中的一个，此次可能作为wip fiber，也可能作为current fiber)
     const root = scheduleUpdateOnFiber(fiber, lane, eventTime);
 
     if (isTransitionLane(lane) && root !== null) {

@@ -290,6 +290,7 @@ function safelyCallDestroy(
 let focusedInstanceHandle: null | Fiber = null;
 let shouldFireAfterActiveInstanceBlur: boolean = false;
 
+// PHASE:(commitBeforeMutationEffects)
 export function commitBeforeMutationEffects(
   root: FiberRoot,
   firstChild: Fiber,
@@ -483,6 +484,7 @@ function commitBeforeMutationEffectsDeletion(deletion: Fiber) {
   }
 }
 
+// PHASE:(commitHookEffectListUnmount，执行useEffect清理函数)
 function commitHookEffectListUnmount(
   flags: HookFlags,
   finishedWork: Fiber,
@@ -506,7 +508,7 @@ function commitHookEffectListUnmount(
     } while (effect !== firstEffect);
   }
 }
-
+// PHASE:(commitHookEffectListMount，执行useEffect回调函数)
 function commitHookEffectListMount(tag: number, finishedWork: Fiber) {
   const updateQueue: FunctionComponentUpdateQueue | null = (finishedWork.updateQueue: any);
   const lastEffect = updateQueue !== null ? updateQueue.lastEffect : null;
@@ -609,6 +611,7 @@ export function commitPassiveEffectDurations(
   }
 }
 
+// PHASE:(commitLayoutEffectOnFiber)
 function commitLayoutEffectOnFiber(
   finishedRoot: FiberRoot,
   current: Fiber | null,
@@ -1721,6 +1724,7 @@ function commitDeletion(
   detachFiberMutation(current);
 }
 
+// PHASE:(commitWork)
 function commitWork(current: Fiber | null, finishedWork: Fiber): void {
   if (!supportsMutation) {
     switch (finishedWork.tag) {
@@ -2025,6 +2029,7 @@ function commitResetTextContent(current: Fiber) {
   resetTextContent(current.stateNode);
 }
 
+// PHASE:(commitMutationEffects)
 export function commitMutationEffects(
   root: FiberRoot,
   firstChild: Fiber,
@@ -2091,6 +2096,7 @@ function commitMutationEffects_complete(root: FiberRoot) {
   }
 }
 
+// PHASE:(commitMutationEffectsOnFiber)
 function commitMutationEffectsOnFiber(finishedWork: Fiber, root: FiberRoot) {
   // TODO: The factoring of this phase could probably be improved. Consider
   // switching on the type of work before checking the flags. That's what
@@ -2215,6 +2221,7 @@ function commitMutationEffectsOnFiber(finishedWork: Fiber, root: FiberRoot) {
   }
 }
 
+// PHASE:(commitLayoutEffects)
 export function commitLayoutEffects(
   finishedWork: Fiber,
   root: FiberRoot,
@@ -2535,6 +2542,7 @@ function commitPassiveMountEffects_complete(
   }
 }
 
+// PHASE:(commitPassiveMountOnFiber)
 function commitPassiveMountOnFiber(
   finishedRoot: FiberRoot,
   finishedWork: Fiber,
@@ -2643,6 +2651,7 @@ function commitPassiveUnmountEffects_complete() {
   }
 }
 
+// PHASE:(commitPassiveUnmountOnFiber)
 function commitPassiveUnmountOnFiber(finishedWork: Fiber): void {
   switch (finishedWork.tag) {
     case FunctionComponent:

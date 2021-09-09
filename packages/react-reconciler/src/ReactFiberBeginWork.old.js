@@ -263,6 +263,7 @@ if (__DEV__) {
   didWarnAboutDefaultPropsOnFunctionComponent = {};
 }
 
+// PHASE:(render子阶段，reconcileChildren，作用：生成workInProgress的child)
 export function reconcileChildren(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -935,6 +936,7 @@ function markRef(current: Fiber | null, workInProgress: Fiber) {
   }
 }
 
+// //CHILDPHASE:(render子阶段，updateFunctionComponent)
 function updateFunctionComponent(
   current,
   workInProgress,
@@ -984,6 +986,7 @@ function updateFunctionComponent(
       debugRenderPhaseSideEffectsForStrictMode &&
       workInProgress.mode & StrictLegacyMode
     ) {
+      // FEATURE:(disableLogs，开发环境移除了console)
       disableLogs();
       try {
         nextChildren = renderWithHooks(
@@ -1000,6 +1003,7 @@ function updateFunctionComponent(
     }
     setIsRendering(false);
   } else {
+    // RECORD:生成children，执行Component更新state，如果改变，则标记didReceiveUpdate=true
     nextChildren = renderWithHooks(
       current,
       workInProgress,
@@ -1024,6 +1028,7 @@ function updateFunctionComponent(
   return workInProgress.child;
 }
 
+// CHILDPHASE:(updateClassComponent)
 function updateClassComponent(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -1261,6 +1266,7 @@ function pushHostRootContext(workInProgress) {
   pushHostContainer(workInProgress, root.containerInfo);
 }
 
+// CHILDPHASE:(render子阶段，updateHostRoot)
 function updateHostRoot(current, workInProgress, renderLanes) {
   pushHostRootContext(workInProgress);
   const updateQueue = workInProgress.updateQueue;
@@ -1344,6 +1350,7 @@ function updateHostRoot(current, workInProgress, renderLanes) {
   return workInProgress.child;
 }
 
+// CHILDPHASE:(updateHostComponent)
 function updateHostComponent(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -3109,6 +3116,7 @@ function updatePortalComponent(
 
 let hasWarnedAboutUsingNoValuePropOnContextProvider = false;
 
+// CHILDPHASE:(updateContextProvider)
 function updateContextProvider(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -3259,7 +3267,7 @@ export function markWorkInProgressReceivedUpdate() {
 export function checkIfWorkInProgressReceivedUpdate() {
   return didReceiveUpdate;
 }
-
+// CHILDPHASE:(bailoutOnAlreadyFinishedWork，复用子fiber)
 function bailoutOnAlreadyFinishedWork(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -3295,6 +3303,7 @@ function bailoutOnAlreadyFinishedWork(
     }
   }
 
+  // RECORD:(此时的current、wip的child均指向child wip，内部会复用child current来生成新fiber)
   // This fiber doesn't have work, but its subtree does. Clone the child
   // fibers and continue.
   cloneChildFibers(current, workInProgress);
@@ -3592,6 +3601,10 @@ function attemptEarlyBailoutIfNoScheduledUpdate(
   return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
 }
 
+// PHASE:(beginWork，作用：增/删/改/复用 子fiberNode，diff对fiberNode.flags标记)
+// 两种生成child wip的方式：
+// 1.bailoutOnAlreadyFinishedWork内cloneChildFibers，复用原current child fiber，并设置上effect相关属性
+// 2.reconcileChildren内diff，更新时使用useFiber复用原wip child fiber，并设置上新jsx对象的props
 function beginWork(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -3654,6 +3667,9 @@ function beginWork(
         // See https://github.com/facebook/react/pull/19216.
         didReceiveUpdate = true;
       } else {
+        // RECORD:发布订阅+高阶组件优化未使用到Context的子组件的render时，这里父组件的beginWork即会进入这里，
+        // 因为lane包含updateLane但props未改变因而只有使用到Context的子组件才会render
+
         // An update was scheduled on this fiber, but there are no new props
         // nor legacy context. Set this to false. If an update queue or context
         // consumer produces a changed value, it will set this to true. Otherwise,
@@ -3670,6 +3686,7 @@ function beginWork(
   // the update queue. However, there's an exception: SimpleMemoComponent
   // sometimes bails out later in the begin phase. This indicates that we should
   // move this assignment out of the common path and into each branch.
+  // RECORD:清除lanes，后面FC内的update hooks可能会更新lanes
   workInProgress.lanes = NoLanes;
 
   switch (workInProgress.tag) {

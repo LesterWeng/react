@@ -29,6 +29,7 @@ import {
 import {initializeUpdateQueue} from './ReactUpdateQueue.old';
 import {LegacyRoot, ConcurrentRoot} from './ReactRootTags';
 
+// STRUCT:(FiberRootNode)
 function FiberRootNode(containerInfo, tag, hydrate) {
   this.tag = tag;
   this.containerInfo = containerInfo;
@@ -93,6 +94,7 @@ function FiberRootNode(containerInfo, tag, hydrate) {
   }
 }
 
+// CHILDPHASE:(createFiberRoot，创建FiberRootNode，创建RootFiber)
 export function createFiberRoot(
   containerInfo: any,
   tag: RootTag,

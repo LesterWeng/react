@@ -816,6 +816,8 @@ export function completeSuspendedOffscreenHostContainer(
   bubbleProperties(workInProgress);
 }
 
+// PHASE:(completeWork，返回null
+// hostComponent update时生成fiberNode.updateQueue，保存形如['key1', 'value1', 'key2', 'value2']的props)
 function completeWork(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -883,6 +885,7 @@ function completeWork(
       popHostContext(workInProgress);
       const rootContainerInstance = getRootHostContainer();
       const type = workInProgress.type;
+      // RECORD:生成fiberNode.updateQueue
       if (current !== null && workInProgress.stateNode != null) {
         updateHostComponent(
           current,
@@ -912,6 +915,7 @@ function completeWork(
         // "stack" as the parent. Then append children as we go in beginWork
         // or completeWork depending on whether we want to add them top->down or
         // bottom->up. Top->down is faster in IE11.
+        // RECORD:Hydrated是指和SSR有关的
         const wasHydrated = popHydrationState(workInProgress);
         if (wasHydrated) {
           // TODO: Move this and createInstance step into the beginPhase
@@ -928,6 +932,7 @@ function completeWork(
             markUpdate(workInProgress);
           }
         } else {
+          // RECORD:创建stateNode
           const instance = createInstance(
             type,
             newProps,
@@ -943,6 +948,7 @@ function completeWork(
           // Certain renderers require commit-time effects for initial mount.
           // (eg DOM renderer supports auto-focus for certain elements).
           // Make sure such renderers get scheduled for later work.
+          // RECORD:设置stateNode属性
           if (
             finalizeInitialChildren(
               instance,

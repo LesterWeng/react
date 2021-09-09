@@ -115,6 +115,7 @@ ReactDOMRoot.prototype.unmount = function(): void {
   });
 };
 
+// CHILDPHASE:(createRoot，创建FiberRootNode，初始化React事件)
 export function createRoot(
   container: Container,
   options?: CreateRootOptions,

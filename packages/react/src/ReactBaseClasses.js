@@ -54,6 +54,7 @@ Component.prototype.isReactComponent = {};
  * @final
  * @protected
  */
+// PHASE:(this.setState)
 Component.prototype.setState = function(partialState, callback) {
   invariant(
     typeof partialState === 'object' ||

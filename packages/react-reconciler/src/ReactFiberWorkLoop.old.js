@@ -238,6 +238,7 @@ const {
   ReactCurrentActQueue,
 } = ReactSharedInternals;
 
+// STRUCT:(ExecutionContext)
 type ExecutionContext = number;
 
 export const NoContext = /*             */ 0b0000;
@@ -361,6 +362,7 @@ export function getCurrentTime() {
   return now();
 }
 
+// CHILDPHASE:(requestUpdateLane)
 export function requestUpdateLane(fiber: Fiber): Lane {
   // Special cases
   const mode = fiber.mode;
@@ -383,6 +385,7 @@ export function requestUpdateLane(fiber: Fiber): Lane {
     return pickArbitraryLane(workInProgressRootRenderLanes);
   }
 
+  // RECORD:(transition时返回transitionLanes)
   const isTransition = requestCurrentTransition() !== NoTransition;
   if (isTransition) {
     // The algorithm for assigning an update to a lane should be stable for all
@@ -434,6 +437,7 @@ function requestRetryLane(fiber: Fiber) {
   return claimNextRetryLane();
 }
 
+// PHASE:(scheduleUpdateOnFiber，dispatchAction时mark fiber lanes，开始react工作流程)
 export function scheduleUpdateOnFiber(
   fiber: Fiber,
   lane: Lane,
@@ -442,6 +446,7 @@ export function scheduleUpdateOnFiber(
   checkForNestedUpdates();
   warnAboutRenderPhaseUpdatesInDEV(fiber);
 
+  // PHASE:(markUpdateLaneFromFiberToRoot，标记fiber的lanes和fiber->root的childLanes)
   const root = markUpdateLaneFromFiberToRoot(fiber, lane);
   if (root === null) {
     return null;
@@ -511,6 +516,7 @@ export function scheduleUpdateOnFiber(
     // Treat `act` as if it's inside `batchedUpdates`, even in legacy mode.
     !(__DEV__ && ReactCurrentActQueue.isBatchingLegacy)
   ) {
+    // FEATURE:(setTimeout等跳出React同步控制时，NoContext时立即调度)
     // Flush the synchronous work now, unless we're already working or inside
     // a batch. This is intentionally inside scheduleUpdateOnFiber instead of
     // scheduleCallbackForFiber to preserve the ability to schedule a callback
@@ -592,6 +598,7 @@ export function isInterleavedUpdate(fiber: Fiber, lane: Lane) {
 // of the existing task is the same as the priority of the next level that the
 // root has work on. This function is called on every update, and right before
 // exiting a task.
+// PHASE:(ensureRootIsScheduled，进行scheduleSyncCallback调度更新)
 function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
   const existingCallbackNode = root.callbackNode;
 
@@ -618,6 +625,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
   // We use the highest priority lane to represent the priority of the callback.
   const newCallbackPriority = getHighestPriorityLane(nextLanes);
 
+  // CHILDPHASE:(复用已存在的task，多个setState情形)
   // Check if there's an existing task. We may be able to reuse it.
   const existingCallbackPriority = root.callbackPriority;
   if (
@@ -655,6 +663,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
 
   // Schedule a new callback.
   let newCallbackNode;
+  // PHASE:(Scheduler:同步调度时，若支持微任务则使用微任务，否则使用Scheduler模块Immediate优先级调度同步的flushSyncCallbacks)
   if (newCallbackPriority === SyncLane) {
     // Special case: Sync React callbacks are scheduled on a special
     // internal queue
@@ -662,6 +671,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
       if (__DEV__ && ReactCurrentActQueue.isBatchingLegacy !== null) {
         ReactCurrentActQueue.didScheduleLegacyUpdate = true;
       }
+      // RECORD:添加到同步任务队列syncQueue
       scheduleLegacySyncCallback(performSyncWorkOnRoot.bind(null, root));
     } else {
       scheduleSyncCallback(performSyncWorkOnRoot.bind(null, root));
@@ -674,6 +684,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
         // of `act`.
         ReactCurrentActQueue.current.push(flushSyncCallbacks);
       } else {
+        // RECORD:微任务内同步执行完任务队列中的任务
         scheduleMicrotask(flushSyncCallbacks);
       }
     } else {
@@ -943,6 +954,7 @@ function markRootSuspended(root, suspendedLanes) {
 
 // This is the entry point for synchronous tasks that don't go
 // through Scheduler
+// PHASE:(performSyncWorkOnRoot，render、commit阶段)
 function performSyncWorkOnRoot(root) {
   if (enableProfilerTimer && enableProfilerNestedUpdatePhase) {
     syncNestedUpdateFlag();
@@ -1040,6 +1052,7 @@ export function deferredUpdates<A>(fn: () => A): A {
   }
 }
 
+// FEATURE:(batchUpdates)
 export function batchedUpdates<A, R>(fn: A => R, a: A): R {
   const prevExecutionContext = executionContext;
   executionContext |= BatchedContext;
@@ -1180,6 +1193,7 @@ export function popRenderLanes(fiber: Fiber) {
   popFromStack(subtreeRenderLanesCursor, fiber);
 }
 
+// PHASE:(prepareFreshStack，复用原root.current生成一个rootFiber，workInProgress指向该rootFiber)
 function prepareFreshStack(root: FiberRoot, lanes: Lanes) {
   root.finishedWork = null;
   root.finishedLanes = NoLanes;
@@ -1351,7 +1365,7 @@ export function renderHasNotSuspendedYet(): boolean {
   // so those are false.
   return workInProgressRootExitStatus === RootIncomplete;
 }
-
+// PHASE:(renderRootSync，生成wip rootFiber，开始工作)
 function renderRootSync(root: FiberRoot, lanes: Lanes) {
   const prevExecutionContext = executionContext;
   executionContext |= RenderContext;
@@ -1359,6 +1373,7 @@ function renderRootSync(root: FiberRoot, lanes: Lanes) {
 
   // If the root or lanes have changed, throw out the existing stack
   // and prepare a fresh one. Otherwise we'll continue where we left off.
+  // RECORD:workInProgressRoot代表在render进行中的root，mount和update都会重新生成rootFiber(即root.current)
   if (workInProgressRoot !== root || workInProgressRootRenderLanes !== lanes) {
     if (enableUpdaterTracking) {
       if (isDevToolsPresent) {
@@ -1430,6 +1445,7 @@ function renderRootSync(root: FiberRoot, lanes: Lanes) {
 
 // The work loop is an extremely hot path. Tell Closure not to inline it.
 /** @noinline */
+// PHASE:(workLoopSync)
 function workLoopSync() {
   // Already timed out, so perform work without checking if we need to yield.
   while (workInProgress !== null) {
@@ -1524,6 +1540,7 @@ function workLoopConcurrent() {
   }
 }
 
+// PHASE:(performUnitOfWork，递与归)
 function performUnitOfWork(unitOfWork: Fiber): void {
   // The current, flushed, state of this fiber is the alternate. Ideally
   // nothing should rely on this, but relying on it here means that we don't
@@ -1552,6 +1569,7 @@ function performUnitOfWork(unitOfWork: Fiber): void {
   ReactCurrentOwner.current = null;
 }
 
+// PHASE:(completeUnitOfWork)
 function completeUnitOfWork(unitOfWork: Fiber): void {
   // Attempt to complete the current unit of work, then move to the next
   // sibling. If there are no more siblings, return to the parent fiber.
@@ -1645,7 +1663,7 @@ function completeUnitOfWork(unitOfWork: Fiber): void {
     workInProgressRootExitStatus = RootCompleted;
   }
 }
-
+// PHASE:(commitRoot，commit阶段开始)
 function commitRoot(root) {
   // TODO: This no longer makes any sense. We already wrap the mutation and
   // layout phases. Should be able to remove.
@@ -1663,6 +1681,7 @@ function commitRoot(root) {
   return null;
 }
 
+// PHASE:(commitRootImpl)
 function commitRootImpl(root, renderPriorityLevel) {
   do {
     // `flushPassiveEffects` will call `flushSyncUpdateQueue` at the end, which
@@ -1827,6 +1846,7 @@ function commitRootImpl(root, renderPriorityLevel) {
     // the mutation phase, so that the previous tree is still current during
     // componentWillUnmount, but before the layout phase, so that the finished
     // work is current during componentDidMount/Update.
+    // RECORD:(切换rootFiber)
     root.current = finishedWork;
 
     // The next phase is the layout phase, where we call effects that read
@@ -1957,6 +1977,7 @@ function commitRootImpl(root, renderPriorityLevel) {
   }
 
   // If layout work was scheduled, flush it now.
+  // PHASE:(flushSyncCallbacks)
   flushSyncCallbacks();
 
   if (__DEV__) {
@@ -2009,6 +2030,7 @@ export function enqueuePendingPassiveProfilerEffect(fiber: Fiber): void {
   }
 }
 
+// PHASE:(flushPassiveEffectsImpl，执行effect unmount和mount回调)
 function flushPassiveEffectsImpl() {
   if (rootWithPendingPassiveEffects === null) {
     return false;

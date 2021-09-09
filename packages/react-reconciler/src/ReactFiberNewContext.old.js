@@ -166,6 +166,7 @@ export function scheduleWorkOnParentPath(
   }
 }
 
+// CHILDPHASE:(propagateContextChange，Provider value change传递改变)
 export function propagateContextChange<T>(
   workInProgress: Fiber,
   context: ReactContext<T>,
@@ -603,6 +604,7 @@ export function prepareToReadContext(
   }
 }
 
+// CHILDPHASE:(useContext核心：readContext)
 export function readContext<T>(context: ReactContext<T>): T {
   if (__DEV__) {
     // This warning would fire if you read context inside a Hook like useMemo.
@@ -641,6 +643,7 @@ export function readContext<T>(context: ReactContext<T>): T {
 
       // This is the first dependency for this component. Create a new list.
       lastContextDependency = contextItem;
+      // STRUCT:(dependencies，当前fiber的context依赖)
       currentlyRenderingFiber.dependencies = {
         lanes: NoLanes,
         firstContext: contextItem,

@@ -314,7 +314,7 @@ export function finalizeInitialChildren(
   setInitialProperties(domElement, type, props, rootContainerInstance);
   return shouldAutoFocusHostComponent(type, props);
 }
-
+// CHILDPHASE:(prepareUpdate)
 export function prepareUpdate(
   domElement: Instance,
   type: string,

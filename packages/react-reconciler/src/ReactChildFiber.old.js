@@ -302,6 +302,7 @@ function ChildReconciler(shouldTrackSideEffects) {
     return existingChildren;
   }
 
+  // CHILDPHASE:(useFiber，除了cloneChildFibers外的另一种复用，sibling默认清除)
   function useFiber(fiber: Fiber, pendingProps: mixed): Fiber {
     // We currently set sibling to null and index to 0 here because it is easy
     // to forget to do before returning it. E.g. for the single child case.
@@ -538,6 +539,7 @@ function ChildReconciler(shouldTrackSideEffects) {
     return null;
   }
 
+  // PHASE:(updateSlot)
   function updateSlot(
     returnFiber: Fiber,
     oldFiber: Fiber | null,
@@ -718,6 +720,7 @@ function ChildReconciler(shouldTrackSideEffects) {
     return knownKeys;
   }
 
+  // CHILDPHASE:(reconcileChildrenArray)
   function reconcileChildrenArray(
     returnFiber: Fiber,
     currentFirstChild: Fiber | null,
@@ -759,6 +762,7 @@ function ChildReconciler(shouldTrackSideEffects) {
     let lastPlacedIndex = 0;
     let newIdx = 0;
     let nextOldFiber = null;
+    // RECORD:第一轮遍历，仅处理key匹配的情况
     for (; oldFiber !== null && newIdx < newChildren.length; newIdx++) {
       if (oldFiber.index > newIdx) {
         nextOldFiber = oldFiber;
@@ -789,6 +793,7 @@ function ChildReconciler(shouldTrackSideEffects) {
           deleteChild(returnFiber, oldFiber);
         }
       }
+      // RECORD:placeChild区分move和stay
       lastPlacedIndex = placeChild(newFiber, lastPlacedIndex, newIdx);
       if (previousNewFiber === null) {
         // TODO: Move out of the loop. This only happens for the first run.
@@ -1082,6 +1087,7 @@ function ChildReconciler(shouldTrackSideEffects) {
     return created;
   }
 
+  // CHILDPHASE:(reconcileSingleElement)
   function reconcileSingleElement(
     returnFiber: Fiber,
     currentFirstChild: Fiber | null,
@@ -1195,10 +1201,10 @@ function ChildReconciler(shouldTrackSideEffects) {
     created.return = returnFiber;
     return created;
   }
-
   // This API will tag the children with the side-effect of the reconciliation
   // itself. They will be added to the side-effect list as we pass through the
   // children and the parent.
+  //CHILDPHASE:(render子阶段，reconcileChildFibers)
   function reconcileChildFibers(
     returnFiber: Fiber,
     currentFirstChild: Fiber | null,
@@ -1304,7 +1310,7 @@ function ChildReconciler(shouldTrackSideEffects) {
 
 export const reconcileChildFibers = ChildReconciler(true);
 export const mountChildFibers = ChildReconciler(false);
-
+//CHILDPHASE:(cloneChildFibers，复用)
 export function cloneChildFibers(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -1320,6 +1326,7 @@ export function cloneChildFibers(
 
   let currentChild = workInProgress.child;
   let newChild = createWorkInProgress(currentChild, currentChild.pendingProps);
+  // RECORD:(切换workInProgress.child的wip为新child fiber)
   workInProgress.child = newChild;
 
   newChild.return = workInProgress;

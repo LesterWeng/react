@@ -6,11 +6,11 @@
  *
  * @flow
  */
-
 import {enableCreateEventHandleAPI} from 'shared/ReactFeatureFlags';
 
 export type Flags = number;
 
+// STRUCT:(SideEffectTags)
 // Don't change these two values. They're used by React Dev Tools.
 export const NoFlags = /*                      */ 0b00000000000000000000000;
 export const PerformedWork = /*                */ 0b00000000000000000000001;

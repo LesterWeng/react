@@ -237,6 +237,7 @@ function findHostInstanceWithWarning(
   return findHostInstance(component);
 }
 
+// PHASE:(createContainer，创建FiberRootNode、RootFiber)
 export function createContainer(
   containerInfo: Container,
   tag: RootTag,
@@ -255,6 +256,7 @@ export function createContainer(
   );
 }
 
+// PHASE:(updateContainer，基于container(FiberRootNode)开始调度更新)
 export function updateContainer(
   element: ReactNodeList,
   container: OpaqueRoot,
