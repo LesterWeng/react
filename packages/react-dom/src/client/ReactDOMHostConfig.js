@@ -162,6 +162,8 @@ function shouldAutoFocusHostComponent(type: string, props: Props): boolean {
   return false;
 }
 
+// PHASE:(ReactDOM HostConfig)
+
 export * from 'react-reconciler/src/ReactFiberHostConfigWithNoPersistence';
 
 export function getRootHostContext(
@@ -314,7 +316,6 @@ export function finalizeInitialChildren(
   setInitialProperties(domElement, type, props, rootContainerInstance);
   return shouldAutoFocusHostComponent(type, props);
 }
-// CHILDPHASE:(prepareUpdate)
 export function prepareUpdate(
   domElement: Instance,
   type: string,

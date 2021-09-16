@@ -276,6 +276,7 @@ if (supportsMutation) {
     workInProgress.updateQueue = (updatePayload: any);
     // If the update payload indicates that there is a change or if there
     // is a new ref we mark this as an update. All the work is done in commitWork.
+    // CHILDPHASE:(markUpdate, completeWork结束，若有修改则给其打上Update flag)
     if (updatePayload) {
       markUpdate(workInProgress);
     }
@@ -635,8 +636,7 @@ function cutOffTailIfNeeded(
       break;
     }
   }
-}
-
+// CHILDPHASE:(bubbleProperties)
 function bubbleProperties(completedWork: Fiber) {
   const didBailout =
     completedWork.alternate !== null &&
@@ -941,6 +941,8 @@ function completeWork(
             workInProgress,
           );
 
+          // CHILDPHASE:(appendAllChildren，beginWork内已经生成了所有的直接child fiber，
+          // 这里同步将所有直接child fiber的stateNode append到当前fiber.stateNode，因为stateNode是由completeWork自下而上创建的)
           appendAllChildren(instance, workInProgress, false, false);
 
           workInProgress.stateNode = instance;
@@ -948,7 +950,6 @@ function completeWork(
           // Certain renderers require commit-time effects for initial mount.
           // (eg DOM renderer supports auto-focus for certain elements).
           // Make sure such renderers get scheduled for later work.
-          // RECORD:设置stateNode属性
           if (
             finalizeInitialChildren(
               instance,
