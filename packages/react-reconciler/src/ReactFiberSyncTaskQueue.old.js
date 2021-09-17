@@ -38,6 +38,7 @@ export function scheduleLegacySyncCallback(callback: SchedulerCallback) {
   scheduleSyncCallback(callback);
 }
 
+// FEATURE:(flushSyncCallbacksOnlyInLegacyMode，仅用于batchedUpdates)
 export function flushSyncCallbacksOnlyInLegacyMode() {
   // Only flushes the queue if there's a legacy sync callback scheduled.
   // TODO: There's only a single type of callback: performSyncOnWorkOnRoot. So
@@ -49,7 +50,7 @@ export function flushSyncCallbacksOnlyInLegacyMode() {
   }
 }
 
-// PHASE:(Scheduler:同步模式下使用的调度)
+// PHASE:(flushSyncCallbacks，同步执行完所有syncQueue内的调度任务)
 export function flushSyncCallbacks() {
   if (!isFlushingSyncQueue && syncQueue !== null) {
     // Prevent re-entrancy.

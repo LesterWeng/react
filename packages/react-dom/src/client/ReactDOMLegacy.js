@@ -265,7 +265,7 @@ export function hydrate(
   );
 }
 
-// PHASE:(ReactDOM.render，
+// API-ReactDOM.render
 // 不同container(根dom元素)执行ReactDOM.render时都会创建自己的FiberRootNode，
 // 相同container重复执行时，调用updateContainer进行更新)
 export function render(

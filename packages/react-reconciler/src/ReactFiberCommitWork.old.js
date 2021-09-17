@@ -484,7 +484,7 @@ function commitBeforeMutationEffectsDeletion(deletion: Fiber) {
   }
 }
 
-// PHASE:(commitHookEffectListUnmount，执行useEffect清理函数)
+// PHASE:(commitHookEffectListUnmount，根据flags同步执行useEffect/useLayoutEffect的清理函数)
 function commitHookEffectListUnmount(
   flags: HookFlags,
   finishedWork: Fiber,
@@ -508,7 +508,7 @@ function commitHookEffectListUnmount(
     } while (effect !== firstEffect);
   }
 }
-// PHASE:(commitHookEffectListMount，执行useEffect回调函数)
+// PHASE:(commitHookEffectListMount，根据tag同步执行useEffect/useLayoutEffect回调函数)
 function commitHookEffectListMount(tag: number, finishedWork: Fiber) {
   const updateQueue: FunctionComponentUpdateQueue | null = (finishedWork.updateQueue: any);
   const lastEffect = updateQueue !== null ? updateQueue.lastEffect : null;
@@ -611,7 +611,6 @@ export function commitPassiveEffectDurations(
   }
 }
 
-// PHASE:(commitLayoutEffectOnFiber)
 function commitLayoutEffectOnFiber(
   finishedRoot: FiberRoot,
   current: Fiber | null,
@@ -1468,6 +1467,7 @@ function getHostSibling(fiber: Fiber): ?Instance {
   }
 }
 
+// PHASE:(commitPlacement，进行HostComponent的placement DOM操作)
 function commitPlacement(finishedWork: Fiber): void {
   if (!supportsMutation) {
     return;
@@ -1724,7 +1724,7 @@ function commitDeletion(
   detachFiberMutation(current);
 }
 
-// PHASE:(commitWork)
+// PHASE:(commitWork，进行HostComponent的update DOM操作、FC的clean effect，由commitMutationEffectsOnFiber调用)
 function commitWork(current: Fiber | null, finishedWork: Fiber): void {
   if (!supportsMutation) {
     switch (finishedWork.tag) {
@@ -2096,7 +2096,6 @@ function commitMutationEffects_complete(root: FiberRoot) {
   }
 }
 
-// PHASE:(commitMutationEffectsOnFiber)
 function commitMutationEffectsOnFiber(finishedWork: Fiber, root: FiberRoot) {
   // TODO: The factoring of this phase could probably be improved. Consider
   // switching on the type of work before checking the flags. That's what
@@ -2488,6 +2487,7 @@ function reappearLayoutEffects_complete(subtreeRoot: Fiber) {
   }
 }
 
+// PHASE:(commitPassiveMountEffects)
 export function commitPassiveMountEffects(
   root: FiberRoot,
   finishedWork: Fiber,
@@ -2542,7 +2542,6 @@ function commitPassiveMountEffects_complete(
   }
 }
 
-// PHASE:(commitPassiveMountOnFiber)
 function commitPassiveMountOnFiber(
   finishedRoot: FiberRoot,
   finishedWork: Fiber,
@@ -2570,6 +2569,7 @@ function commitPassiveMountOnFiber(
   }
 }
 
+// PHASE:(commitPassiveUnmountEffects)
 export function commitPassiveUnmountEffects(firstChild: Fiber): void {
   nextEffect = firstChild;
   commitPassiveUnmountEffects_begin();
@@ -2651,7 +2651,6 @@ function commitPassiveUnmountEffects_complete() {
   }
 }
 
-// PHASE:(commitPassiveUnmountOnFiber)
 function commitPassiveUnmountOnFiber(finishedWork: Fiber): void {
   switch (finishedWork.tag) {
     case FunctionComponent:

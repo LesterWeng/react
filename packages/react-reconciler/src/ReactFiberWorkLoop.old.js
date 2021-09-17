@@ -598,7 +598,7 @@ export function isInterleavedUpdate(fiber: Fiber, lane: Lane) {
 // of the existing task is the same as the priority of the next level that the
 // root has work on. This function is called on every update, and right before
 // exiting a task.
-// PHASE:(ensureRootIsScheduled，进行scheduleSyncCallback调度更新)
+// PHASE:(ensureRootIsScheduled，将更新任务添加到syncQueue并根据是否同步模式使用微任务或其他方式调度)
 function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
   const existingCallbackNode = root.callbackNode;
 
@@ -663,7 +663,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
 
   // Schedule a new callback.
   let newCallbackNode;
-  // PHASE:(Scheduler:同步调度时，若支持微任务则使用微任务，否则使用Scheduler模块Immediate优先级调度同步的flushSyncCallbacks)
+  // PHASE:(push syncQueue，仅在ensureRootIsScheduled中会出现,同步调度时，若支持微任务则使用微任务，否则使用Scheduler模块Immediate优先级调度同步的flushSyncCallbacks)
   if (newCallbackPriority === SyncLane) {
     // Special case: Sync React callbacks are scheduled on a special
     // internal queue
@@ -723,6 +723,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
 
 // This is the entry point for every concurrent task, i.e. anything that
 // goes through Scheduler.
+// PHASE:(performConcurrentWorkOnRoot)
 function performConcurrentWorkOnRoot(root, didTimeout) {
   if (enableProfilerTimer && enableProfilerNestedUpdatePhase) {
     resetNestedUpdateFlag();
@@ -965,6 +966,7 @@ function performSyncWorkOnRoot(root) {
     'Should not already be working.',
   );
 
+  // API-useEffect:(render、commit工作循环开始前先执行完未处理完的useEffect的清理和回调)
   flushPassiveEffects();
 
   let lanes = getNextLanes(root, NoLanes);
@@ -1690,6 +1692,7 @@ function commitRootImpl(root, renderPriorityLevel) {
     // no more pending effects.
     // TODO: Might be better if `flushPassiveEffects` did not automatically
     // flush synchronous work at the end, to avoid factoring hazards like this.
+    // API-useEffect:(commitRootImpl先flush完清理和回调)
     flushPassiveEffects();
   } while (rootWithPendingPassiveEffects !== null);
   flushRenderPhaseStrictModeWarningsInDEV();
@@ -1977,7 +1980,7 @@ function commitRootImpl(root, renderPriorityLevel) {
   }
 
   // If layout work was scheduled, flush it now.
-  // PHASE:(flushSyncCallbacks)
+  // Feature-flushSyncQueue:(commitRoot后，flush执行中添加的更新任务)
   flushSyncCallbacks();
 
   if (__DEV__) {
@@ -1993,6 +1996,7 @@ function commitRootImpl(root, renderPriorityLevel) {
   return null;
 }
 
+// API-useEffect:(flushPassiveEffects)
 export function flushPassiveEffects(): boolean {
   // Returns whether passive effects were flushed.
   // TODO: Combine this check with the one in flushPassiveEFfectsImpl. We should
@@ -2030,7 +2034,7 @@ export function enqueuePendingPassiveProfilerEffect(fiber: Fiber): void {
   }
 }
 
-// PHASE:(flushPassiveEffectsImpl，执行effect unmount和mount回调)
+// API-useEffect:(flushPassiveEffectsImpl，仅当root存在passiveEffect时执行useEffect的unmount和mount回调)
 function flushPassiveEffectsImpl() {
   if (rootWithPendingPassiveEffects === null) {
     return false;
@@ -2091,6 +2095,7 @@ function flushPassiveEffectsImpl() {
 
   executionContext = prevExecutionContext;
 
+  // Feature-flushSyncQueue:(flushPassiveEffects后，flush执行中添加的更新任务)
   flushSyncCallbacks();
 
   // If additional passive effects were scheduled, increment a counter. If this

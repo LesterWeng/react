@@ -162,7 +162,7 @@ function shouldAutoFocusHostComponent(type: string, props: Props): boolean {
   return false;
 }
 
-// PHASE:(ReactDOM HostConfig)
+// Record-ReactDOM HostConfig)
 
 export * from 'react-reconciler/src/ReactFiberHostConfigWithNoPersistence';
 
