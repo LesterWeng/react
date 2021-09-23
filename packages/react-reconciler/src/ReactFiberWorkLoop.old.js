@@ -13,6 +13,7 @@ import type {Lanes, Lane} from './ReactFiberLane.old';
 import type {SuspenseState} from './ReactFiberSuspenseComponent.old';
 import type {StackCursor} from './ReactFiberStack.old';
 import type {Flags} from './ReactFiberFlags';
+import type {FunctionComponentUpdateQueue} from './ReactFiberHooks.old';
 
 import {
   warnAboutDeprecatedLifecycles,
@@ -30,9 +31,11 @@ import {
   enableStrictEffects,
   skipUnmountedBoundaries,
   enableUpdaterTracking,
+  warnOnSubscriptionInsideStartTransition,
 } from 'shared/ReactFeatureFlags';
 import ReactSharedInternals from 'shared/ReactSharedInternals';
 import invariant from 'shared/invariant';
+import is from 'shared/objectIs';
 
 import {
   // Aliased because `act` will override and push to an internal queue
@@ -115,6 +118,7 @@ import {
   NoFlags,
   Placement,
   Incomplete,
+  StoreConsistency,
   HostEffectMask,
   Hydrating,
   BeforeMutationMask,
@@ -139,7 +143,8 @@ import {
   includesNonIdleWork,
   includesOnlyRetries,
   includesOnlyTransitions,
-  shouldTimeSlice,
+  includesBlockingLane,
+  includesExpiredLane,
   getNextLanes,
   markStarvedLanesAsExpired,
   getLanesToRetrySynchronouslyOnError,
@@ -388,6 +393,13 @@ export function requestUpdateLane(fiber: Fiber): Lane {
   // RECORD:(transition时返回transitionLanes)
   const isTransition = requestCurrentTransition() !== NoTransition;
   if (isTransition) {
+    if (
+      __DEV__ &&
+      warnOnSubscriptionInsideStartTransition &&
+      ReactCurrentBatchConfig._updatedFibers
+    ) {
+      ReactCurrentBatchConfig._updatedFibers.add(fiber);
+    }
     // The algorithm for assigning an update to a lane should be stable for all
     // updates at the same priority within the same event. To do this, the
     // inputs to the algorithm must be the same.
@@ -773,39 +785,25 @@ function performConcurrentWorkOnRoot(root, didTimeout) {
   // TODO: We only check `didTimeout` defensively, to account for a Scheduler
   // bug we're still investigating. Once the bug in Scheduler is fixed,
   // we can remove this, since we track expiration ourselves.
-  let exitStatus =
-    shouldTimeSlice(root, lanes) &&
-    (disableSchedulerTimeoutInWorkLoop || !didTimeout)
-      ? renderRootConcurrent(root, lanes)
-      : renderRootSync(root, lanes);
+  const shouldTimeSlice =
+    !includesBlockingLane(root, lanes) &&
+    !includesExpiredLane(root, lanes) &&
+    (disableSchedulerTimeoutInWorkLoop || !didTimeout);
+  let exitStatus = shouldTimeSlice
+    ? renderRootConcurrent(root, lanes)
+    : renderRootSync(root, lanes);
   if (exitStatus !== RootIncomplete) {
     if (exitStatus === RootErrored) {
-      const prevExecutionContext = executionContext;
-      executionContext |= RetryAfterError;
-
-      // If an error occurred during hydration,
-      // discard server response and fall back to client side render.
-      if (root.hydrate) {
-        root.hydrate = false;
-        if (__DEV__) {
-          errorHydratingContainer(root.containerInfo);
-        }
-        clearContainer(root.containerInfo);
-      }
-
-      // If something threw an error, try rendering one more time. We'll render
-      // synchronously to block concurrent data mutations, and we'll includes
-      // all pending updates are included. If it still fails after the second
-      // attempt, we'll give up and commit the resulting tree.
+      // If something threw an error, try rendering one more time. We'll
+      // render synchronously to block concurrent data mutations, and we'll
+      // includes all pending updates are included. If it still fails after
+      // the second attempt, we'll give up and commit the resulting tree.
       const errorRetryLanes = getLanesToRetrySynchronouslyOnError(root);
       if (errorRetryLanes !== NoLanes) {
         lanes = errorRetryLanes;
-        exitStatus = renderRootSync(root, errorRetryLanes);
+        exitStatus = recoverFromConcurrentError(root, errorRetryLanes);
       }
-
-      executionContext = prevExecutionContext;
     }
-
     if (exitStatus === RootFatalErrored) {
       const fatalError = workInProgressRootFatalError;
       prepareFreshStack(root, NoLanes);
@@ -814,9 +812,42 @@ function performConcurrentWorkOnRoot(root, didTimeout) {
       throw fatalError;
     }
 
+    // Check if this render may have yielded to a concurrent event, and if so,
+    // confirm that any newly rendered stores are consistent.
+    // TODO: It's possible that even a concurrent render may never have yielded
+    // to the main thread, if it was fast enough, or if it expired. We could
+    // skip the consistency check in that case, too.
+    const renderWasConcurrent = !includesBlockingLane(root, lanes);
+    const finishedWork: Fiber = (root.current.alternate: any);
+    if (
+      renderWasConcurrent &&
+      !isRenderConsistentWithExternalStores(finishedWork)
+    ) {
+      // A store was mutated in an interleaved event. Render again,
+      // synchronously, to block further mutations.
+      exitStatus = renderRootSync(root, lanes);
+
+      // We need to check again if something threw
+      if (exitStatus === RootErrored) {
+        const errorRetryLanes = getLanesToRetrySynchronouslyOnError(root);
+        if (errorRetryLanes !== NoLanes) {
+          lanes = errorRetryLanes;
+          exitStatus = recoverFromConcurrentError(root, errorRetryLanes);
+          // We assume the tree is now consistent because we didn't yield to any
+          // concurrent events.
+        }
+      }
+      if (exitStatus === RootFatalErrored) {
+        const fatalError = workInProgressRootFatalError;
+        prepareFreshStack(root, NoLanes);
+        markRootSuspended(root, lanes);
+        ensureRootIsScheduled(root, now());
+        throw fatalError;
+      }
+    }
+
     // We now have a consistent tree. The next step is either to commit it,
     // or, if something suspended, wait to commit it after a timeout.
-    const finishedWork: Fiber = (root.current.alternate: any);
     root.finishedWork = finishedWork;
     root.finishedLanes = lanes;
     finishConcurrentRender(root, exitStatus, lanes);
@@ -829,6 +860,27 @@ function performConcurrentWorkOnRoot(root, didTimeout) {
     return performConcurrentWorkOnRoot.bind(null, root);
   }
   return null;
+}
+
+function recoverFromConcurrentError(root, errorRetryLanes) {
+  const prevExecutionContext = executionContext;
+  executionContext |= RetryAfterError;
+
+  // If an error occurred during hydration, discard server response and fall
+  // back to client side render.
+  if (root.hydrate) {
+    root.hydrate = false;
+    if (__DEV__) {
+      errorHydratingContainer(root.containerInfo);
+    }
+    clearContainer(root.containerInfo);
+  }
+
+  const exitStatus = renderRootSync(root, errorRetryLanes);
+
+  executionContext = prevExecutionContext;
+
+  return exitStatus;
 }
 
 function finishConcurrentRender(root, exitStatus, lanes) {
@@ -941,6 +993,58 @@ function finishConcurrentRender(root, exitStatus, lanes) {
       invariant(false, 'Unknown root exit status.');
     }
   }
+}
+
+function isRenderConsistentWithExternalStores(finishedWork: Fiber): boolean {
+  // Search the rendered tree for external store reads, and check whether the
+  // stores were mutated in a concurrent event. Intentionally using a iterative
+  // loop instead of recursion so we can exit early.
+  let node: Fiber = finishedWork;
+  while (true) {
+    if (node.flags & StoreConsistency) {
+      const updateQueue: FunctionComponentUpdateQueue | null = (node.updateQueue: any);
+      if (updateQueue !== null) {
+        const checks = updateQueue.stores;
+        if (checks !== null) {
+          for (let i = 0; i < checks.length; i++) {
+            const check = checks[i];
+            const getSnapshot = check.getSnapshot;
+            const renderedValue = check.value;
+            try {
+              if (!is(getSnapshot(), renderedValue)) {
+                // Found an inconsistent store.
+                return false;
+              }
+            } catch (error) {
+              // If `getSnapshot` throws, return `false`. This will schedule
+              // a re-render, and the error will be rethrown during render.
+              return false;
+            }
+          }
+        }
+      }
+    }
+    const child = node.child;
+    if (node.subtreeFlags & StoreConsistency && child !== null) {
+      child.return = node;
+      node = child;
+      continue;
+    }
+    if (node === finishedWork) {
+      return true;
+    }
+    while (node.sibling === null) {
+      if (node.return === null || node.return === finishedWork) {
+        return true;
+      }
+      node = node.return;
+    }
+    node.sibling.return = node.return;
+    node = node.sibling;
+  }
+  // Flow doesn't know this is unreachable, but eslint does
+  // eslint-disable-next-line no-unreachable
+  return true;
 }
 
 function markRootSuspended(root, suspendedLanes) {
@@ -1912,6 +2016,15 @@ function commitRootImpl(root, renderPriorityLevel) {
   remainingLanes = root.pendingLanes;
 
   // Check if there's remaining work on this root
+  // TODO: This is part of the `componentDidCatch` implementation. Its purpose
+  // is to detect whether something might have called setState inside
+  // `componentDidCatch`. The mechanism is known to be flawed because `setState`
+  // inside `componentDidCatch` is itself flawed — that's why we recommend
+  // `getDerivedStateFromError` instead. However, it could be improved by
+  // checking if remainingLanes includes Sync work, instead of whether there's
+  // any work remaining at all (which would also include stuff like Suspense
+  // retries or transitions). It's been like this for a while, though, so fixing
+  // it probably isn't that urgent.
   if (remainingLanes === NoLanes) {
     // If there's no remaining work, we can clear the set of already failed
     // error boundaries.
@@ -1922,23 +2035,6 @@ function commitRootImpl(root, renderPriorityLevel) {
     if (!rootDidHavePassiveEffects) {
       commitDoubleInvokeEffectsInDEV(root.current, false);
     }
-  }
-
-  if (includesSomeLane(remainingLanes, (SyncLane: Lane))) {
-    if (enableProfilerTimer && enableProfilerNestedUpdatePhase) {
-      markNestedUpdateScheduled();
-    }
-
-    // Count the number of times the root synchronously re-renders without
-    // finishing. If there are too many, it indicates an infinite update loop.
-    if (root === rootWithNestedUpdates) {
-      nestedUpdateCount++;
-    } else {
-      nestedUpdateCount = 0;
-      rootWithNestedUpdates = root;
-    }
-  } else {
-    nestedUpdateCount = 0;
   }
 
   onCommitRootDevTools(finishedWork.stateNode, renderPriorityLevel);
@@ -1977,6 +2073,25 @@ function commitRootImpl(root, renderPriorityLevel) {
     root.tag !== LegacyRoot
   ) {
     flushPassiveEffects();
+  }
+
+  // Read this again, since a passive effect might have updated it
+  remainingLanes = root.pendingLanes;
+  if (includesSomeLane(remainingLanes, (SyncLane: Lane))) {
+    if (enableProfilerTimer && enableProfilerNestedUpdatePhase) {
+      markNestedUpdateScheduled();
+    }
+
+    // Count the number of times the root synchronously re-renders without
+    // finishing. If there are too many, it indicates an infinite update loop.
+    if (root === rootWithNestedUpdates) {
+      nestedUpdateCount++;
+    } else {
+      nestedUpdateCount = 0;
+      rootWithNestedUpdates = root;
+    }
+  } else {
+    nestedUpdateCount = 0;
   }
 
   // If layout work was scheduled, flush it now.
@@ -2580,7 +2695,7 @@ if (__DEV__ && replayFailedUnitOfWorkWithInvokeGuardedCallback) {
         }
       }
       // We always throw the original error in case the second render pass is not idempotent.
-      // This can happen if a memoized function or CommonJS module doesn't throw after first invokation.
+      // This can happen if a memoized function or CommonJS module doesn't throw after first invocation.
       throw originalError;
     }
   };

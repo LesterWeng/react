@@ -67,7 +67,7 @@ const WARNING_STRINGS = {
     'A big nested update was scheduled during layout. ' +
     'Nested updates require React to re-render synchronously before the browser can paint. ' +
     'Consider delaying this update by moving it to a passive effect (useEffect).',
-  SUSPEND_DURING_UPATE:
+  SUSPEND_DURING_UPDATE:
     'A component suspended during an update which caused a fallback to be shown. ' +
     "Consider using the Transition API to avoid hiding components after they've been mounted.",
 };
@@ -912,6 +912,20 @@ export default async function preprocessData(
   timeline.forEach(event => processTimelineEvent(event, profilerData, state));
 
   if (profilerVersion === null) {
+    if (
+      profilerData.schedulingEvents.length === 0 &&
+      profilerData.batchUIDToMeasuresMap.size === 0
+    ) {
+      // No profiler version could indicate data was logged using an older build of React,
+      // before an explicitly profiler version was included in the logging data.
+      // But it could also indicate that the website was either not using React, or using a production build.
+      // The easiest way to check for this case is to see if the data contains any scheduled updates or render work.
+      throw new InvalidProfileError(
+        'No React marks were found in the provided profile.' +
+          ' Please provide profiling data from an React application running in development or profiling mode.',
+      );
+    }
+
     throw new InvalidProfileError(
       `This version of profiling data is not supported by the current profiler.`,
     );
@@ -951,7 +965,7 @@ export default async function preprocessData(
           lane => profilerData.laneToLabelMap.get(lane) === 'Transition',
         )
       ) {
-        suspenseEvent.warning = WARNING_STRINGS.SUSPEND_DURING_UPATE;
+        suspenseEvent.warning = WARNING_STRINGS.SUSPEND_DURING_UPDATE;
       }
     },
   );

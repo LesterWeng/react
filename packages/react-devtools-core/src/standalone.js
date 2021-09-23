@@ -21,6 +21,7 @@ import {
   getBreakOnConsoleErrors,
   getSavedComponentFilters,
   getShowInlineWarningsAndErrors,
+  getHideConsoleLogsInStrictMode,
 } from 'react-devtools-shared/src/utils';
 import {Server} from 'ws';
 import {join} from 'path';
@@ -41,6 +42,13 @@ let node: HTMLElement = ((null: any): HTMLElement);
 let nodeWaitingToConnectHTML: string = '';
 let projectRoots: Array<string> = [];
 let statusListener: StatusListener = (message: string) => {};
+
+// TODO (Webpack 5) Hopefully we can remove this prop after the Webpack 5 migration.
+function hookNamesModuleLoaderFunction() {
+  return import(
+    /* webpackChunkName: 'parseHookNames' */ 'react-devtools-shared/src/hooks/parseHookNames'
+  );
+}
 
 function setContentDOMNode(value: HTMLElement) {
   node = value;
@@ -99,6 +107,7 @@ function reload() {
       createElement(DevTools, {
         bridge: ((bridge: any): FrontendBridge),
         canViewElementSourceFunction,
+        hookNamesModuleLoaderFunction,
         showTabBar: true,
         store: ((store: any): Store),
         warnIfLegacyBackendDetected: true,
@@ -310,6 +319,9 @@ function startServer(
       )};
       window.__REACT_DEVTOOLS_SHOW_INLINE_WARNINGS_AND_ERRORS__ = ${JSON.stringify(
         getShowInlineWarningsAndErrors(),
+      )};
+      window.__REACT_DEVTOOLS_HIDE_CONSOLE_LOGS_IN_STRICT_MODE__ = ${JSON.stringify(
+        getHideConsoleLogsInStrictMode(),
       )};`;
 
     response.end(

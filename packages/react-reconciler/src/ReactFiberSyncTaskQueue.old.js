@@ -53,7 +53,7 @@ export function flushSyncCallbacksOnlyInLegacyMode() {
 // PHASE:(flushSyncCallbacks，同步执行完所有syncQueue内的调度任务)
 export function flushSyncCallbacks() {
   if (!isFlushingSyncQueue && syncQueue !== null) {
-    // Prevent re-entrancy.
+    // Prevent re-entrance.
     isFlushingSyncQueue = true;
     let i = 0;
     const previousUpdatePriority = getCurrentUpdatePriority();

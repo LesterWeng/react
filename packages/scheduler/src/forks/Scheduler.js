@@ -11,6 +11,11 @@
 import {
   enableSchedulerDebugging,
   enableProfiling,
+  enableIsInputPending,
+  enableIsInputPendingContinuous,
+  frameYieldMs,
+  continuousYieldMs,
+  maxYieldMs,
 } from '../SchedulerFeatureFlags';
 
 import {push, pop, peek} from '../SchedulerMinHeap';
@@ -35,8 +40,6 @@ import {
   stopLoggingProfilingEvents,
   startLoggingProfilingEvents,
 } from '../SchedulerProfiling';
-
-import {enableIsInputPending} from '../SchedulerFeatureFlags';
 
 let getCurrentTime;
 const hasPerformanceNow =
@@ -80,7 +83,7 @@ var isSchedulerPaused = false;
 var currentTask = null;
 var currentPriorityLevel = NormalPriority;
 
-// This is set while performing work, to prevent re-entrancy.
+// This is set while performing work, to prevent re-entrance.
 var isPerformingWork = false;
 
 var isHostCallbackScheduled = false;
@@ -100,7 +103,7 @@ const isInputPending =
     ? navigator.scheduling.isInputPending.bind(navigator.scheduling)
     : null;
 
-const continuousOptions = {includeContinuous: true};
+const continuousOptions = {includeContinuous: enableIsInputPendingContinuous};
 
 function advanceTimers(currentTime) {
   // Check for tasks that are no longer delayed and add them to the queue.
@@ -433,10 +436,9 @@ let taskTimeoutID = -1;
 // thread, like user events. By default, it yields multiple times per frame.
 // It does not attempt to align with frame boundaries, since most tasks don't
 // need to be frame aligned; for those that do, use requestAnimationFrame.
-// TODO: Make these configurable
-let frameInterval = 5;
-const continuousInputInterval = 50;
-const maxInterval = 300;
+let frameInterval = frameYieldMs;
+const continuousInputInterval = continuousYieldMs;
+const maxInterval = maxYieldMs;
 let startTime = -1;
 
 let needsPaint = false;
@@ -513,7 +515,7 @@ function forceFrameRate(fps) {
     frameInterval = Math.floor(1000 / fps);
   } else {
     // reset the framerate
-    frameInterval = 5;
+    frameInterval = frameYieldMs;
   }
 }
 

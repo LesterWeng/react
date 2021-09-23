@@ -179,7 +179,7 @@ describe('useMutableSource', () => {
       source.value = 'two';
       expect(Scheduler).toFlushAndYieldThrough(['a:two', 'b:two']);
 
-      // Umounting a component should remove its subscription.
+      // Unmounting a component should remove its subscription.
       ReactNoop.renderToRootWithID(
         <>
           <Component
@@ -196,7 +196,7 @@ describe('useMutableSource', () => {
       ReactNoop.flushPassiveEffects();
       expect(source.listenerCount).toBe(1);
 
-      // Umounting a root should remove the remaining event listeners
+      // Unmounting a root should remove the remaining event listeners
       ReactNoop.unmountRootWithID('root');
       expect(Scheduler).toFlushAndYield([]);
       ReactNoop.flushPassiveEffects();
@@ -1788,123 +1788,6 @@ describe('useMutableSource', () => {
   });
 
   if (__DEV__) {
-    // See https://github.com/facebook/react/issues/19948
-    describe('side effecte detection', () => {
-      it('should throw if a mutable source is mutated during render', () => {
-        const source = createSource(0);
-        const mutableSource = createMutableSource(
-          source,
-          param => param.version,
-        );
-
-        let mutatedValueInRender = 1;
-        function MutateDuringRead() {
-          const value = useMutableSource(
-            mutableSource,
-            defaultGetSnapshot,
-            defaultSubscribe,
-          );
-          Scheduler.unstable_yieldValue('MutateDuringRead:' + value);
-          // Note that mutating an exeternal value during render is a side effect and is not supported.
-          source.value = mutatedValueInRender++;
-          return null;
-        }
-
-        // TODO The mechanism for this type of detection relies on StrictMode double rendering.
-        expect(() => {
-          act(() => {
-            ReactNoop.render(
-              <React.StrictMode>
-                <MutateDuringRead />
-              </React.StrictMode>,
-            );
-          });
-        }).toThrow(
-          'A mutable source was mutated while the MutateDuringRead component ' +
-            'was rendering. This is not supported. Move any mutations into ' +
-            'event handlers or effects.',
-        );
-
-        expect(Scheduler).toHaveYielded([
-          // First attempt
-          'MutateDuringRead:0',
-
-          // Synchronous retry
-          'MutateDuringRead:1',
-        ]);
-      });
-
-      it('should throw if a mutable source is mutated during render (legacy mode)', () => {
-        const source = createSource('initial');
-        const mutableSource = createMutableSource(
-          source,
-          param => param.version,
-        );
-
-        function MutateDuringRead() {
-          const value = useMutableSource(
-            mutableSource,
-            defaultGetSnapshot,
-            defaultSubscribe,
-          );
-          Scheduler.unstable_yieldValue('MutateDuringRead:' + value);
-          // Note that mutating an exeternal value during render is a side effect and is not supported.
-          if (value === 'initial') {
-            source.value = 'updated';
-          }
-          return null;
-        }
-
-        expect(() => {
-          act(() => {
-            ReactNoop.renderLegacySyncRoot(
-              <React.StrictMode>
-                <MutateDuringRead />
-              </React.StrictMode>,
-            );
-          });
-        }).toThrow(
-          'A mutable source was mutated while the MutateDuringRead component ' +
-            'was rendering. This is not supported. Move any mutations into ' +
-            'event handlers or effects.',
-        );
-
-        expect(Scheduler).toHaveYielded(['MutateDuringRead:initial']);
-      });
-
-      it('should not misidentify mutations after render as side effects', async () => {
-        const source = createSource('initial');
-        const mutableSource = createMutableSource(
-          source,
-          param => param.version,
-        );
-
-        function MutateDuringRead() {
-          const value = useMutableSource(
-            mutableSource,
-            defaultGetSnapshot,
-            defaultSubscribe,
-          );
-          Scheduler.unstable_yieldValue('MutateDuringRead:' + value);
-          return null;
-        }
-
-        await act(async () => {
-          ReactNoop.renderLegacySyncRoot(
-            <React.StrictMode>
-              <MutateDuringRead />
-            </React.StrictMode>,
-          );
-        });
-        expect(Scheduler).toHaveYielded(['MutateDuringRead:initial']);
-
-        await act(async () => {
-          source.value = 'updated';
-        });
-        expect(Scheduler).toHaveYielded(['MutateDuringRead:updated']);
-      });
-    });
-
     describe('dev warnings', () => {
       it('should warn if the subscribe function does not return an unsubscribe function', () => {
         const source = createSource('one');

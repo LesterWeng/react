@@ -100,6 +100,14 @@ export function useEffect(
   return dispatcher.useEffect(create, deps);
 }
 
+export function useInsertionEffect(
+  create: () => (() => void) | void,
+  deps: Array<mixed> | void | null,
+): void {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useInsertionEffect(create, deps);
+}
+
 export function useLayoutEffect(
   create: () => (() => void) | void,
   deps: Array<mixed> | void | null,
@@ -167,6 +175,19 @@ export function useMutableSource<Source, Snapshot>(
 ): Snapshot {
   const dispatcher = resolveDispatcher();
   return dispatcher.useMutableSource(source, getSnapshot, subscribe);
+}
+
+export function useSyncExternalStore<T>(
+  subscribe: (() => void) => () => void,
+  getSnapshot: () => T,
+  getServerSnapshot?: () => T,
+): T {
+  const dispatcher = resolveDispatcher();
+  return dispatcher.useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot,
+  );
 }
 
 export function useCacheRefresh(): <T>(?() => T, ?T) => void {

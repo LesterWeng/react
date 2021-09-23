@@ -59,6 +59,8 @@ import {inspectHooksOfFiber} from 'react-debug-tools';
 import {
   patch as patchConsole,
   registerRenderer as registerRendererWithConsole,
+  patchForStrictMode as patchConsoleForStrictMode,
+  unpatchForStrictMode as unpatchConsoleForStrictMode,
 } from './console';
 import {
   CONCURRENT_MODE_NUMBER,
@@ -740,17 +742,17 @@ export function attach(
       window.__REACT_DEVTOOLS_BREAK_ON_CONSOLE_ERRORS__ === true;
     const showInlineWarningsAndErrors =
       window.__REACT_DEVTOOLS_SHOW_INLINE_WARNINGS_AND_ERRORS__ !== false;
-    if (
-      appendComponentStack ||
-      breakOnConsoleErrors ||
-      showInlineWarningsAndErrors
-    ) {
-      patchConsole({
-        appendComponentStack,
-        breakOnConsoleErrors,
-        showInlineWarningsAndErrors,
-      });
-    }
+    const hideConsoleLogsInStrictMode =
+      window.__REACT_DEVTOOLS_HIDE_CONSOLE_LOGS_IN_STRICT_MODE__ === true;
+    const browserTheme = window.__REACT_DEVTOOLS_BROWSER_THEME__;
+
+    patchConsole({
+      appendComponentStack,
+      breakOnConsoleErrors,
+      showInlineWarningsAndErrors,
+      hideConsoleLogsInStrictMode,
+      browserTheme,
+    });
   }
 
   const debug = (
@@ -1139,6 +1141,13 @@ export function attach(
     // and give React time to process the Fast Refresh delay.
 
     untrackFibersSet.add(fiber);
+
+    // React may detach alternate pointers during unmount;
+    // Since our untracking code is async, we should explicily track the pending alternate here as well.
+    const alternate = fiber.alternate;
+    if (alternate !== null) {
+      untrackFibersSet.add(alternate);
+    }
 
     if (untrackFibersTimeoutID === null) {
       untrackFibersTimeoutID = setTimeout(untrackFibers, 1000);
@@ -4242,6 +4251,7 @@ export function attach(
     handlePostCommitFiberRoot,
     inspectElement,
     logElementToConsole,
+    patchConsoleForStrictMode,
     prepareViewAttributeSource,
     prepareViewElementSource,
     overrideError,
@@ -4254,6 +4264,7 @@ export function attach(
     startProfiling,
     stopProfiling,
     storeAsGlobal,
+    unpatchConsoleForStrictMode,
     updateComponentFilters,
   };
 }

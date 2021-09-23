@@ -11,13 +11,16 @@ import {
   getBreakOnConsoleErrors,
   getSavedComponentFilters,
   getShowInlineWarningsAndErrors,
+  getHideConsoleLogsInStrictMode,
 } from 'react-devtools-shared/src/utils';
 import {
   localStorageGetItem,
   localStorageRemoveItem,
   localStorageSetItem,
 } from 'react-devtools-shared/src/storage';
+import {registerEventLogger} from 'react-devtools-shared/src/Logger';
 import DevTools from 'react-devtools-shared/src/devtools/views/DevTools';
+import {__DEBUG__} from 'react-devtools-shared/src/constants';
 
 const LOCAL_STORAGE_SUPPORTS_PROFILING_KEY =
   'React::DevTools::supportsProfiling';
@@ -42,6 +45,12 @@ function syncSavedPreferences() {
     )};
     window.__REACT_DEVTOOLS_SHOW_INLINE_WARNINGS_AND_ERRORS__ = ${JSON.stringify(
       getShowInlineWarningsAndErrors(),
+    )};
+    window.__REACT_DEVTOOLS_HIDE_CONSOLE_LOGS_IN_STRICT_MODE__ = ${JSON.stringify(
+      getHideConsoleLogsInStrictMode(),
+    )};
+    window.__REACT_DEVTOOLS_BROWSER_THEME__ = ${JSON.stringify(
+      getBrowserTheme(),
     )};`,
   );
 }
@@ -78,6 +87,10 @@ function createPanelIfReactLoaded() {
       let root = null;
 
       const tabId = chrome.devtools.inspectedWindow.tabId;
+
+      registerEventLogger((event: LogEvent) => {
+        // TODO: hook up event logging
+      });
 
       function initBridgeAndStore() {
         const port = chrome.runtime.connect({
@@ -205,30 +218,143 @@ function createPanelIfReactLoaded() {
           }
         };
 
+        let debugIDCounter = 0;
+
+        // For some reason in Firefox, chrome.runtime.sendMessage() from a content script
+        // never reaches the chrome.runtime.onMessage event listener.
+        let fetchFileWithCaching = null;
+        if (isChrome) {
+          const fetchFromNetworkCache = (url, resolve, reject) => {
+            // Debug ID allows us to avoid re-logging (potentially long) URL strings below,
+            // while also still associating (potentially) interleaved logs with the original request.
+            let debugID = null;
+
+            if (__DEBUG__) {
+              debugID = debugIDCounter++;
+              console.log(`[main] fetchFromNetworkCache(${debugID})`, url);
+            }
+
+            chrome.devtools.network.getHAR(harLog => {
+              for (let i = 0; i < harLog.entries.length; i++) {
+                const entry = harLog.entries[i];
+                if (url === entry.request.url) {
+                  if (__DEBUG__) {
+                    console.log(
+                      `[main] fetchFromNetworkCache(${debugID}) Found matching URL in HAR`,
+                      url,
+                    );
+                  }
+
+                  entry.getContent(content => {
+                    if (content) {
+                      if (__DEBUG__) {
+                        console.log(
+                          `[main] fetchFromNetworkCache(${debugID}) Content retrieved`,
+                        );
+                      }
+
+                      resolve(content);
+                    } else {
+                      if (__DEBUG__) {
+                        console.log(
+                          `[main] fetchFromNetworkCache(${debugID}) Invalid content returned by getContent()`,
+                          content,
+                        );
+                      }
+
+                      // Edge case where getContent() returned null; fall back to fetch.
+                      fetchFromPage(url, resolve, reject);
+                    }
+                  });
+
+                  return;
+                }
+              }
+
+              if (__DEBUG__) {
+                console.log(
+                  `[main] fetchFromNetworkCache(${debugID}) No cached request found in getHAR()`,
+                );
+              }
+
+              // No matching URL found; fall back to fetch.
+              fetchFromPage(url, resolve, reject);
+            });
+          };
+
+          const fetchFromPage = (url, resolve, reject) => {
+            if (__DEBUG__) {
+              console.log('[main] fetchFromPage()', url);
+            }
+
+            function onPortMessage({payload, source}) {
+              if (source === 'react-devtools-content-script') {
+                switch (payload?.type) {
+                  case 'fetch-file-with-cache-complete':
+                    chrome.runtime.onMessage.removeListener(onPortMessage);
+                    resolve(payload.value);
+                    break;
+                  case 'fetch-file-with-cache-error':
+                    chrome.runtime.onMessage.removeListener(onPortMessage);
+                    reject(payload.value);
+                    break;
+                }
+              }
+            }
+
+            chrome.runtime.onMessage.addListener(onPortMessage);
+
+            chrome.devtools.inspectedWindow.eval(`
+              window.postMessage({
+                source: 'react-devtools-extension',
+                payload: {
+                  type: 'fetch-file-with-cache',
+                  url: "${url}",
+                },
+              });
+            `);
+          };
+
+          // Fetching files from the extension won't make use of the network cache
+          // for resources that have already been loaded by the page.
+          // This helper function allows the extension to request files to be fetched
+          // by the content script (running in the page) to increase the likelihood of a cache hit.
+          fetchFileWithCaching = url => {
+            return new Promise((resolve, reject) => {
+              // Try fetching from the Network cache first.
+              // If DevTools was opened after the page started loading, we may have missed some requests.
+              // So fall back to a fetch() from the page and hope we get a cached response that way.
+              fetchFromNetworkCache(url, resolve, reject);
+            });
+          };
+        }
+
+        // TODO (Webpack 5) Hopefully we can remove this prop after the Webpack 5 migration.
+        const hookNamesModuleLoaderFunction = () =>
+          import(
+            /* webpackChunkName: 'parseHookNames' */ 'react-devtools-shared/src/hooks/parseHookNames'
+          );
+
         root = createRoot(document.createElement('div'));
 
         render = (overrideTab = mostRecentOverrideTab) => {
           mostRecentOverrideTab = overrideTab;
-          import('./parseHookNames').then(
-            ({parseHookNames, purgeCachedMetadata}) => {
-              root.render(
-                createElement(DevTools, {
-                  bridge,
-                  browserTheme: getBrowserTheme(),
-                  componentsPortalContainer,
-                  enabledInspectedElementContextMenu: true,
-                  loadHookNames: parseHookNames,
-                  overrideTab,
-                  profilerPortalContainer,
-                  purgeCachedHookNamesMetadata: purgeCachedMetadata,
-                  showTabBar: false,
-                  store,
-                  warnIfUnsupportedVersionDetected: true,
-                  viewAttributeSourceFunction,
-                  viewElementSourceFunction,
-                }),
-              );
-            },
+          root.render(
+            createElement(DevTools, {
+              bridge,
+              browserTheme: getBrowserTheme(),
+              componentsPortalContainer,
+              enabledInspectedElementContextMenu: true,
+              fetchFileWithCaching,
+              hookNamesModuleLoaderFunction,
+              overrideTab,
+              profilerPortalContainer,
+              showTabBar: false,
+              store,
+              warnIfUnsupportedVersionDetected: true,
+              viewAttributeSourceFunction,
+              viewElementSourceFunction,
+            }),
           );
         };
 
