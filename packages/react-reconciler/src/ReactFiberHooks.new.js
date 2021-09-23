@@ -41,14 +41,17 @@ import {
 } from './ReactTypeOfMode';
 import {
   NoLane,
+  SyncLane,
   NoLanes,
   isSubsetOfLanes,
+  includesBlockingLane,
   mergeLanes,
   removeLanes,
   intersectLanes,
   isTransitionLane,
   markRootEntangled,
   markRootMutableRead,
+  NoTimestamp,
 } from './ReactFiberLane.new';
 import {
   ContinuousEventPriority,
@@ -66,11 +69,13 @@ import {
   PassiveStatic as PassiveStaticEffect,
   StaticMask as StaticMaskEffect,
   Update as UpdateEffect,
+  StoreConsistency,
 } from './ReactFiberFlags';
 import {
   HasEffect as HookHasEffect,
   Layout as HookLayout,
   Passive as HookPassive,
+  Insertion as HookInsertion,
 } from './ReactHookEffectTags';
 import {
   getWorkInProgressRoot,
@@ -113,6 +118,7 @@ import {
   entangleTransitions,
 } from './ReactUpdateQueue.new';
 import {pushInterleavedQueue} from './ReactFiberInterleavedUpdates.new';
+import {warnOnSubscriptionInsideStartTransition} from 'shared/ReactFeatureFlags';
 
 const {ReactCurrentDispatcher, ReactCurrentBatchConfig} = ReactSharedInternals;
 
@@ -135,6 +141,7 @@ export type UpdateQueue<S, A> = {|
 
 let didWarnAboutMismatchedHooksForComponent;
 let didWarnAboutUseOpaqueIdentifier;
+let didWarnUncachedGetSnapshot;
 if (__DEV__) {
   didWarnAboutUseOpaqueIdentifier = {};
   didWarnAboutMismatchedHooksForComponent = new Set();
@@ -144,7 +151,7 @@ export type Hook = {|
   memoizedState: any,
   baseState: any,
   baseQueue: Update<any, any> | null,
-  queue: UpdateQueue<any, any> | null,
+  queue: any,
   next: Hook | null,
 |};
 
@@ -156,7 +163,20 @@ export type Effect = {|
   next: Effect,
 |};
 
-export type FunctionComponentUpdateQueue = {|lastEffect: Effect | null|};
+type StoreInstance<T> = {|
+  value: T,
+  getSnapshot: () => T,
+|};
+
+type StoreConsistencyCheck<T> = {|
+  value: T,
+  getSnapshot: () => T,
+|};
+
+export type FunctionComponentUpdateQueue = {|
+  lastEffect: Effect | null,
+  stores: Array<StoreConsistencyCheck<any>> | null,
+|};
 
 type BasicStateAction<S> = (S => S) | S;
 
@@ -449,7 +469,7 @@ export function renderWithHooks<Props, SecondArg>(
   }
 
   // We can assume the previous dispatcher is always this one, since we set it
-  // at the beginning of the render phase and there's no re-entrancy.
+  // at the beginning of the render phase and there's no re-entrance.
   ReactCurrentDispatcher.current = ContextOnlyDispatcher;
 
   if (__DEV__) {
@@ -553,7 +573,7 @@ export function bailoutHooks(
 
 export function resetHooksAfterThrow(): void {
   // We can assume the previous dispatcher is always this one, since we set it
-  // at the beginning of the render phase and there's no re-entrancy.
+  // at the beginning of the render phase and there's no re-entrance.
   ReactCurrentDispatcher.current = ContextOnlyDispatcher;
 
   if (didScheduleRenderPhaseUpdate) {
@@ -679,6 +699,7 @@ function updateWorkInProgressHook(): Hook {
 function createFunctionComponentUpdateQueue(): FunctionComponentUpdateQueue {
   return {
     lastEffect: null,
+    stores: null,
   };
 }
 
@@ -700,14 +721,15 @@ function mountReducer<S, I, A>(
     initialState = ((initialArg: any): S);
   }
   hook.memoizedState = hook.baseState = initialState;
-  const queue = (hook.queue = {
+  const queue: UpdateQueue<S, A> = {
     pending: null,
     interleaved: null,
     lanes: NoLanes,
     dispatch: null,
     lastRenderedReducer: reducer,
     lastRenderedState: (initialState: any),
-  });
+  };
+  hook.queue = queue;
   const dispatch: Dispatch<A> = (queue.dispatch = (dispatchAction.bind(
     null,
     currentlyRenderingFiber,
@@ -934,7 +956,7 @@ type MutableSourceMemoizedState<Source, Snapshot> = {|
   subscribe: MutableSourceSubscribeFn<Source, Snapshot>,
 |};
 
-function readFromUnsubcribedMutableSource<Source, Snapshot>(
+function readFromUnsubscribedMutableSource<Source, Snapshot>(
   root: FiberRoot,
   source: MutableSource<Source>,
   getSnapshot: MutableSourceGetSnapshotFn<Source, Snapshot>,
@@ -1012,39 +1034,6 @@ function readFromUnsubcribedMutableSource<Source, Snapshot>(
     // the synchronous retry, it will block interleaved mutations, so we should
     // get a consistent read. Therefore, the following error should never be
     // visible to the user.
-    //
-    // If it were to become visible to the user, it suggests one of two things:
-    // a bug in React, or (more likely), a mutation during the render phase that
-    // caused the second re-render attempt to be different from the first.
-    //
-    // We know it's the second case if the logs are currently disabled. So in
-    // dev, we can present a more accurate error message.
-    if (__DEV__) {
-      // eslint-disable-next-line react-internal/no-production-logging
-      if (console.log.__reactDisabledLog) {
-        // If the logs are disabled, this is the dev-only double render. This is
-        // only reachable if there was a mutation during render. Show a helpful
-        // error message.
-        //
-        // Something interesting to note: because we only double render in
-        // development, this error will never happen during production. This is
-        // actually true of all errors that occur during a double render,
-        // because if the first render had thrown, we would have exited the
-        // begin phase without double rendering. We should consider suppressing
-        // any error from a double render (with a warning) to more closely match
-        // the production behavior.
-        const componentName = getComponentNameFromFiber(
-          currentlyRenderingFiber,
-        );
-        invariant(
-          false,
-          'A mutable source was mutated while the %s component was rendering. ' +
-            'This is not supported. Move any mutations into event handlers ' +
-            'or effects.',
-          componentName,
-        );
-      }
-    }
 
     // We expect this error not to be thrown during the synchronous retry,
     // because we blocked interleaved mutations.
@@ -1074,7 +1063,7 @@ function useMutableSource<Source, Snapshot>(
 
   // eslint-disable-next-line prefer-const
   let [currentSnapshot, setSnapshot] = dispatcher.useState(() =>
-    readFromUnsubcribedMutableSource(root, source, getSnapshot),
+    readFromUnsubscribedMutableSource(root, source, getSnapshot),
   );
   let snapshot = currentSnapshot;
 
@@ -1193,7 +1182,7 @@ function useMutableSource<Source, Snapshot>(
     // So if there are interleaved updates, they get pushed to the older queue.
     // When this becomes current, the previous queue and dispatch method will be discarded,
     // including any interleaving updates that occur.
-    const newQueue = {
+    const newQueue: UpdateQueue<Snapshot, BasicStateAction<Snapshot>> = {
       pending: null,
       interleaved: null,
       lanes: NoLanes,
@@ -1208,7 +1197,7 @@ function useMutableSource<Source, Snapshot>(
     ): any);
     stateHook.queue = newQueue;
     stateHook.baseQueue = null;
-    snapshot = readFromUnsubcribedMutableSource(root, source, getSnapshot);
+    snapshot = readFromUnsubscribedMutableSource(root, source, getSnapshot);
     stateHook.memoizedState = stateHook.baseState = snapshot;
   }
 
@@ -1241,6 +1230,237 @@ function updateMutableSource<Source, Snapshot>(
   return useMutableSource(hook, source, getSnapshot, subscribe);
 }
 
+function mountSyncExternalStore<T>(
+  subscribe: (() => void) => () => void,
+  getSnapshot: () => T,
+  getServerSnapshot?: () => T,
+): T {
+  const fiber = currentlyRenderingFiber;
+  const hook = mountWorkInProgressHook();
+
+  let nextSnapshot;
+  const isHydrating = getIsHydrating();
+  if (isHydrating) {
+    if (getServerSnapshot === undefined) {
+      invariant(
+        false,
+        'Missing getServerSnapshot, which is required for ' +
+          'server-rendered content. Will revert to client rendering.',
+      );
+    }
+    nextSnapshot = getServerSnapshot();
+    if (__DEV__) {
+      if (!didWarnUncachedGetSnapshot) {
+        if (nextSnapshot !== getServerSnapshot()) {
+          console.error(
+            'The result of getServerSnapshot should be cached to avoid an infinite loop',
+          );
+          didWarnUncachedGetSnapshot = true;
+        }
+      }
+    }
+  } else {
+    nextSnapshot = getSnapshot();
+    if (__DEV__) {
+      if (!didWarnUncachedGetSnapshot) {
+        if (nextSnapshot !== getSnapshot()) {
+          console.error(
+            'The result of getSnapshot should be cached to avoid an infinite loop',
+          );
+          didWarnUncachedGetSnapshot = true;
+        }
+      }
+    }
+    // Unless we're rendering a blocking lane, schedule a consistency check.
+    // Right before committing, we will walk the tree and check if any of the
+    // stores were mutated.
+    //
+    // We won't do this if we're hydrating server-rendered content, because if
+    // the content is stale, it's already visible anyway. Instead we'll patch
+    // it up in a passive effect.
+    const root: FiberRoot | null = getWorkInProgressRoot();
+    invariant(
+      root !== null,
+      'Expected a work-in-progress root. This is a bug in React. Please file an issue.',
+    );
+    if (!includesBlockingLane(root, renderLanes)) {
+      pushStoreConsistencyCheck(fiber, getSnapshot, nextSnapshot);
+    }
+  }
+
+  // Read the current snapshot from the store on every render. This breaks the
+  // normal rules of React, and only works because store updates are
+  // always synchronous.
+  hook.memoizedState = nextSnapshot;
+  const inst: StoreInstance<T> = {
+    value: nextSnapshot,
+    getSnapshot,
+  };
+  hook.queue = inst;
+
+  // Schedule an effect to subscribe to the store.
+  mountEffect(subscribeToStore.bind(null, fiber, inst, subscribe), [subscribe]);
+
+  // Schedule an effect to update the mutable instance fields. We will update
+  // this whenever subscribe, getSnapshot, or value changes. Because there's no
+  // clean-up function, and we track the deps correctly, we can call pushEffect
+  // directly, without storing any additional state. For the same reason, we
+  // don't need to set a static flag, either.
+  // TODO: We can move this to the passive phase once we add a pre-commit
+  // consistency check. See the next comment.
+  fiber.flags |= PassiveEffect;
+  pushEffect(
+    HookHasEffect | HookPassive,
+    updateStoreInstance.bind(null, fiber, inst, nextSnapshot, getSnapshot),
+    undefined,
+    null,
+  );
+
+  return nextSnapshot;
+}
+
+function updateSyncExternalStore<T>(
+  subscribe: (() => void) => () => void,
+  getSnapshot: () => T,
+  getServerSnapshot?: () => T,
+): T {
+  const fiber = currentlyRenderingFiber;
+  const hook = updateWorkInProgressHook();
+  // Read the current snapshot from the store on every render. This breaks the
+  // normal rules of React, and only works because store updates are
+  // always synchronous.
+  const nextSnapshot = getSnapshot();
+  if (__DEV__) {
+    if (!didWarnUncachedGetSnapshot) {
+      if (nextSnapshot !== getSnapshot()) {
+        console.error(
+          'The result of getSnapshot should be cached to avoid an infinite loop',
+        );
+        didWarnUncachedGetSnapshot = true;
+      }
+    }
+  }
+  const prevSnapshot = hook.memoizedState;
+  const snapshotChanged = !is(prevSnapshot, nextSnapshot);
+  if (snapshotChanged) {
+    hook.memoizedState = nextSnapshot;
+    markWorkInProgressReceivedUpdate();
+  }
+  const inst = hook.queue;
+
+  updateEffect(subscribeToStore.bind(null, fiber, inst, subscribe), [
+    subscribe,
+  ]);
+
+  // Whenever getSnapshot or subscribe changes, we need to check in the
+  // commit phase if there was an interleaved mutation. In concurrent mode
+  // this can happen all the time, but even in synchronous mode, an earlier
+  // effect may have mutated the store.
+  if (
+    inst.getSnapshot !== getSnapshot ||
+    snapshotChanged ||
+    // Check if the susbcribe function changed. We can save some memory by
+    // checking whether we scheduled a subscription effect above.
+    (workInProgressHook !== null &&
+      workInProgressHook.memoizedState.tag & HookHasEffect)
+  ) {
+    fiber.flags |= PassiveEffect;
+    pushEffect(
+      HookHasEffect | HookPassive,
+      updateStoreInstance.bind(null, fiber, inst, nextSnapshot, getSnapshot),
+      undefined,
+      null,
+    );
+
+    // Unless we're rendering a blocking lane, schedule a consistency check.
+    // Right before committing, we will walk the tree and check if any of the
+    // stores were mutated.
+    const root: FiberRoot | null = getWorkInProgressRoot();
+    invariant(
+      root !== null,
+      'Expected a work-in-progress root. This is a bug in React. Please file an issue.',
+    );
+    if (!includesBlockingLane(root, renderLanes)) {
+      pushStoreConsistencyCheck(fiber, getSnapshot, nextSnapshot);
+    }
+  }
+
+  return nextSnapshot;
+}
+
+function pushStoreConsistencyCheck<T>(
+  fiber: Fiber,
+  getSnapshot: () => T,
+  renderedSnapshot: T,
+) {
+  fiber.flags |= StoreConsistency;
+  const check: StoreConsistencyCheck<T> = {
+    getSnapshot,
+    value: renderedSnapshot,
+  };
+  let componentUpdateQueue: null | FunctionComponentUpdateQueue = (currentlyRenderingFiber.updateQueue: any);
+  if (componentUpdateQueue === null) {
+    componentUpdateQueue = createFunctionComponentUpdateQueue();
+    currentlyRenderingFiber.updateQueue = (componentUpdateQueue: any);
+    componentUpdateQueue.stores = [check];
+  } else {
+    const stores = componentUpdateQueue.stores;
+    if (stores === null) {
+      componentUpdateQueue.stores = [check];
+    } else {
+      stores.push(check);
+    }
+  }
+}
+
+function updateStoreInstance<T>(
+  fiber: Fiber,
+  inst: StoreInstance<T>,
+  nextSnapshot: T,
+  getSnapshot: () => T,
+) {
+  // These are updated in the passive phase
+  inst.value = nextSnapshot;
+  inst.getSnapshot = getSnapshot;
+
+  // Something may have been mutated in between render and commit. This could
+  // have been in an event that fired before the passive effects, or it could
+  // have been in a layout effect. In that case, we would have used the old
+  // snapsho and getSnapshot values to bail out. We need to check one more time.
+  if (checkIfSnapshotChanged(inst)) {
+    // Force a re-render.
+    forceStoreRerender(fiber);
+  }
+}
+
+function subscribeToStore(fiber, inst, subscribe) {
+  const handleStoreChange = () => {
+    // The store changed. Check if the snapshot changed since the last time we
+    // read from the store.
+    if (checkIfSnapshotChanged(inst)) {
+      // Force a re-render.
+      forceStoreRerender(fiber);
+    }
+  };
+  // Subscribe to the store and return a clean-up function.
+  return subscribe(handleStoreChange);
+}
+
+function checkIfSnapshotChanged(inst) {
+  const latestGetSnapshot = inst.getSnapshot;
+  const prevValue = inst.value;
+  try {
+    const nextValue = latestGetSnapshot();
+    return !is(prevValue, nextValue);
+  } catch (error) {
+    return true;
+  }
+}
+
+function forceStoreRerender(fiber) {
+  scheduleUpdateOnFiber(fiber, SyncLane, NoTimestamp);
+}
+
 function mountState<S>(
   initialState: (() => S) | S,
 ): [S, Dispatch<BasicStateAction<S>>] {
@@ -1250,14 +1470,15 @@ function mountState<S>(
     initialState = initialState();
   }
   hook.memoizedState = hook.baseState = initialState;
-  const queue = (hook.queue = {
+  const queue: UpdateQueue<S, BasicStateAction<S>> = {
     pending: null,
     interleaved: null,
     lanes: NoLanes,
     dispatch: null,
     lastRenderedReducer: basicStateReducer,
     lastRenderedState: (initialState: any),
-  });
+  };
+  hook.queue = queue;
   const dispatch: Dispatch<
     BasicStateAction<S>,
   > = (queue.dispatch = (dispatchAction.bind(
@@ -1482,6 +1703,20 @@ function updateEffect(
     }
   }
   return updateEffectImpl(PassiveEffect, HookPassive, create, deps);
+}
+
+function mountInsertionEffect(
+  create: () => (() => void) | void,
+  deps: Array<mixed> | void | null,
+): void {
+  return mountEffectImpl(UpdateEffect, HookInsertion, create, deps);
+}
+
+function updateInsertionEffect(
+  create: () => (() => void) | void,
+  deps: Array<mixed> | void | null,
+): void {
+  return updateEffectImpl(UpdateEffect, HookInsertion, create, deps);
 }
 
 function mountLayoutEffect(
@@ -1725,6 +1960,23 @@ function startTransition(setPending, callback) {
   } finally {
     setCurrentUpdatePriority(previousPriority);
     ReactCurrentBatchConfig.transition = prevTransition;
+    if (__DEV__) {
+      if (
+        prevTransition !== 1 &&
+        warnOnSubscriptionInsideStartTransition &&
+        ReactCurrentBatchConfig._updatedFibers
+      ) {
+        const updatedFibersCount = ReactCurrentBatchConfig._updatedFibers.size;
+        if (updatedFibersCount > 10) {
+          console.warn(
+            'Detected a large number of updates inside startTransition. ' +
+              'If this is due to a subscription please re-write it to use React provided hooks. ' +
+              'Otherwise concurrent mode guarantees are off the table.',
+          );
+        }
+        ReactCurrentBatchConfig._updatedFibers.clear();
+      }
+    }
   }
 }
 
@@ -1949,7 +2201,7 @@ function dispatchAction<S, A>(
         // This is the first update. Create a circular list.
         update.next = update;
         // At the end of the current render, this queue's interleaved updates will
-        // be transfered to the pending queue.
+        // be transferred to the pending queue.
         pushInterleavedQueue(queue);
       } else {
         update.next = interleaved.next;
@@ -2069,6 +2321,7 @@ export const ContextOnlyDispatcher: Dispatcher = {
   useContext: throwInvalidHookError,
   useEffect: throwInvalidHookError,
   useImperativeHandle: throwInvalidHookError,
+  useInsertionEffect: throwInvalidHookError,
   useLayoutEffect: throwInvalidHookError,
   useMemo: throwInvalidHookError,
   useReducer: throwInvalidHookError,
@@ -2078,6 +2331,7 @@ export const ContextOnlyDispatcher: Dispatcher = {
   useDeferredValue: throwInvalidHookError,
   useTransition: throwInvalidHookError,
   useMutableSource: throwInvalidHookError,
+  useSyncExternalStore: throwInvalidHookError,
   useOpaqueIdentifier: throwInvalidHookError,
 
   unstable_isNewReconciler: enableNewReconciler,
@@ -2095,6 +2349,7 @@ const HooksDispatcherOnMount: Dispatcher = {
   useEffect: mountEffect,
   useImperativeHandle: mountImperativeHandle,
   useLayoutEffect: mountLayoutEffect,
+  useInsertionEffect: mountInsertionEffect,
   useMemo: mountMemo,
   useReducer: mountReducer,
   useRef: mountRef,
@@ -2103,6 +2358,7 @@ const HooksDispatcherOnMount: Dispatcher = {
   useDeferredValue: mountDeferredValue,
   useTransition: mountTransition,
   useMutableSource: mountMutableSource,
+  useSyncExternalStore: mountSyncExternalStore,
   useOpaqueIdentifier: mountOpaqueIdentifier,
 
   unstable_isNewReconciler: enableNewReconciler,
@@ -2119,6 +2375,7 @@ const HooksDispatcherOnUpdate: Dispatcher = {
   useContext: readContext,
   useEffect: updateEffect,
   useImperativeHandle: updateImperativeHandle,
+  useInsertionEffect: updateInsertionEffect,
   useLayoutEffect: updateLayoutEffect,
   useMemo: updateMemo,
   useReducer: updateReducer,
@@ -2128,6 +2385,7 @@ const HooksDispatcherOnUpdate: Dispatcher = {
   useDeferredValue: updateDeferredValue,
   useTransition: updateTransition,
   useMutableSource: updateMutableSource,
+  useSyncExternalStore: updateSyncExternalStore,
   useOpaqueIdentifier: updateOpaqueIdentifier,
 
   unstable_isNewReconciler: enableNewReconciler,
@@ -2144,6 +2402,7 @@ const HooksDispatcherOnRerender: Dispatcher = {
   useContext: readContext,
   useEffect: updateEffect,
   useImperativeHandle: updateImperativeHandle,
+  useInsertionEffect: updateInsertionEffect,
   useLayoutEffect: updateLayoutEffect,
   useMemo: updateMemo,
   useReducer: rerenderReducer,
@@ -2153,6 +2412,7 @@ const HooksDispatcherOnRerender: Dispatcher = {
   useDeferredValue: rerenderDeferredValue,
   useTransition: rerenderTransition,
   useMutableSource: updateMutableSource,
+  useSyncExternalStore: mountSyncExternalStore,
   useOpaqueIdentifier: rerenderOpaqueIdentifier,
 
   unstable_isNewReconciler: enableNewReconciler,
@@ -2223,6 +2483,15 @@ if (__DEV__) {
       checkDepsAreArrayDev(deps);
       return mountImperativeHandle(ref, create, deps);
     },
+    useInsertionEffect(
+      create: () => (() => void) | void,
+      deps: Array<mixed> | void | null,
+    ): void {
+      currentHookNameInDev = 'useInsertionEffect';
+      mountHookTypesDev();
+      checkDepsAreArrayDev(deps);
+      return mountInsertionEffect(create, deps);
+    },
     useLayoutEffect(
       create: () => (() => void) | void,
       deps: Array<mixed> | void | null,
@@ -2300,6 +2569,15 @@ if (__DEV__) {
       currentHookNameInDev = 'useMutableSource';
       mountHookTypesDev();
       return mountMutableSource(source, getSnapshot, subscribe);
+    },
+    useSyncExternalStore<T>(
+      subscribe: (() => void) => () => void,
+      getSnapshot: () => T,
+      getServerSnapshot?: () => T,
+    ): T {
+      currentHookNameInDev = 'useSyncExternalStore';
+      mountHookTypesDev();
+      return mountSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
     },
     useOpaqueIdentifier(): OpaqueIDType | void {
       currentHookNameInDev = 'useOpaqueIdentifier';
@@ -2349,6 +2627,14 @@ if (__DEV__) {
       updateHookTypesDev();
       return mountImperativeHandle(ref, create, deps);
     },
+    useInsertionEffect(
+      create: () => (() => void) | void,
+      deps: Array<mixed> | void | null,
+    ): void {
+      currentHookNameInDev = 'useInsertionEffect';
+      updateHookTypesDev();
+      return mountInsertionEffect(create, deps);
+    },
     useLayoutEffect(
       create: () => (() => void) | void,
       deps: Array<mixed> | void | null,
@@ -2425,6 +2711,15 @@ if (__DEV__) {
       updateHookTypesDev();
       return mountMutableSource(source, getSnapshot, subscribe);
     },
+    useSyncExternalStore<T>(
+      subscribe: (() => void) => () => void,
+      getSnapshot: () => T,
+      getServerSnapshot?: () => T,
+    ): T {
+      currentHookNameInDev = 'useSyncExternalStore';
+      updateHookTypesDev();
+      return mountSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+    },
     useOpaqueIdentifier(): OpaqueIDType | void {
       currentHookNameInDev = 'useOpaqueIdentifier';
       updateHookTypesDev();
@@ -2472,6 +2767,14 @@ if (__DEV__) {
       currentHookNameInDev = 'useImperativeHandle';
       updateHookTypesDev();
       return updateImperativeHandle(ref, create, deps);
+    },
+    useInsertionEffect(
+      create: () => (() => void) | void,
+      deps: Array<mixed> | void | null,
+    ): void {
+      currentHookNameInDev = 'useInsertionEffect';
+      updateHookTypesDev();
+      return updateInsertionEffect(create, deps);
     },
     useLayoutEffect(
       create: () => (() => void) | void,
@@ -2549,6 +2852,15 @@ if (__DEV__) {
       updateHookTypesDev();
       return updateMutableSource(source, getSnapshot, subscribe);
     },
+    useSyncExternalStore<T>(
+      subscribe: (() => void) => () => void,
+      getSnapshot: () => T,
+      getServerSnapshot?: () => T,
+    ): T {
+      currentHookNameInDev = 'useSyncExternalStore';
+      updateHookTypesDev();
+      return updateSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+    },
     useOpaqueIdentifier(): OpaqueIDType | void {
       currentHookNameInDev = 'useOpaqueIdentifier';
       updateHookTypesDev();
@@ -2597,6 +2909,14 @@ if (__DEV__) {
       currentHookNameInDev = 'useImperativeHandle';
       updateHookTypesDev();
       return updateImperativeHandle(ref, create, deps);
+    },
+    useInsertionEffect(
+      create: () => (() => void) | void,
+      deps: Array<mixed> | void | null,
+    ): void {
+      currentHookNameInDev = 'useInsertionEffect';
+      updateHookTypesDev();
+      return updateInsertionEffect(create, deps);
     },
     useLayoutEffect(
       create: () => (() => void) | void,
@@ -2674,6 +2994,15 @@ if (__DEV__) {
       updateHookTypesDev();
       return updateMutableSource(source, getSnapshot, subscribe);
     },
+    useSyncExternalStore<T>(
+      subscribe: (() => void) => () => void,
+      getSnapshot: () => T,
+      getServerSnapshot?: () => T,
+    ): T {
+      currentHookNameInDev = 'useSyncExternalStore';
+      updateHookTypesDev();
+      return updateSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+    },
     useOpaqueIdentifier(): OpaqueIDType | void {
       currentHookNameInDev = 'useOpaqueIdentifier';
       updateHookTypesDev();
@@ -2726,6 +3055,15 @@ if (__DEV__) {
       warnInvalidHookAccess();
       mountHookTypesDev();
       return mountImperativeHandle(ref, create, deps);
+    },
+    useInsertionEffect(
+      create: () => (() => void) | void,
+      deps: Array<mixed> | void | null,
+    ): void {
+      currentHookNameInDev = 'useInsertionEffect';
+      warnInvalidHookAccess();
+      mountHookTypesDev();
+      return mountInsertionEffect(create, deps);
     },
     useLayoutEffect(
       create: () => (() => void) | void,
@@ -2812,6 +3150,16 @@ if (__DEV__) {
       mountHookTypesDev();
       return mountMutableSource(source, getSnapshot, subscribe);
     },
+    useSyncExternalStore<T>(
+      subscribe: (() => void) => () => void,
+      getSnapshot: () => T,
+      getServerSnapshot?: () => T,
+    ): T {
+      currentHookNameInDev = 'useSyncExternalStore';
+      warnInvalidHookAccess();
+      mountHookTypesDev();
+      return mountSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+    },
     useOpaqueIdentifier(): OpaqueIDType | void {
       currentHookNameInDev = 'useOpaqueIdentifier';
       warnInvalidHookAccess();
@@ -2865,6 +3213,15 @@ if (__DEV__) {
       warnInvalidHookAccess();
       updateHookTypesDev();
       return updateImperativeHandle(ref, create, deps);
+    },
+    useInsertionEffect(
+      create: () => (() => void) | void,
+      deps: Array<mixed> | void | null,
+    ): void {
+      currentHookNameInDev = 'useInsertionEffect';
+      warnInvalidHookAccess();
+      updateHookTypesDev();
+      return updateInsertionEffect(create, deps);
     },
     useLayoutEffect(
       create: () => (() => void) | void,
@@ -2950,6 +3307,16 @@ if (__DEV__) {
       warnInvalidHookAccess();
       updateHookTypesDev();
       return updateMutableSource(source, getSnapshot, subscribe);
+    },
+    useSyncExternalStore<T>(
+      subscribe: (() => void) => () => void,
+      getSnapshot: () => T,
+      getServerSnapshot?: () => T,
+    ): T {
+      currentHookNameInDev = 'useSyncExternalStore';
+      warnInvalidHookAccess();
+      updateHookTypesDev();
+      return updateSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
     },
     useOpaqueIdentifier(): OpaqueIDType | void {
       currentHookNameInDev = 'useOpaqueIdentifier';
@@ -3006,6 +3373,15 @@ if (__DEV__) {
       updateHookTypesDev();
       return updateImperativeHandle(ref, create, deps);
     },
+    useInsertionEffect(
+      create: () => (() => void) | void,
+      deps: Array<mixed> | void | null,
+    ): void {
+      currentHookNameInDev = 'useInsertionEffect';
+      warnInvalidHookAccess();
+      updateHookTypesDev();
+      return updateInsertionEffect(create, deps);
+    },
     useLayoutEffect(
       create: () => (() => void) | void,
       deps: Array<mixed> | void | null,
@@ -3090,6 +3466,16 @@ if (__DEV__) {
       warnInvalidHookAccess();
       updateHookTypesDev();
       return updateMutableSource(source, getSnapshot, subscribe);
+    },
+    useSyncExternalStore<T>(
+      subscribe: (() => void) => () => void,
+      getSnapshot: () => T,
+      getServerSnapshot?: () => T,
+    ): T {
+      currentHookNameInDev = 'useSyncExternalStore';
+      warnInvalidHookAccess();
+      updateHookTypesDev();
+      return updateSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
     },
     useOpaqueIdentifier(): OpaqueIDType | void {
       currentHookNameInDev = 'useOpaqueIdentifier';

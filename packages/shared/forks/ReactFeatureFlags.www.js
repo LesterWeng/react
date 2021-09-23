@@ -31,6 +31,7 @@ export const {
   disableSchedulerTimeoutInWorkLoop,
   enableLazyContextPropagation,
   enableSyncDefaultUpdates,
+  warnOnSubscriptionInsideStartTransition,
 } = dynamicFeatureFlags;
 
 // On WWW, __EXPERIMENTAL__ is used for a new modern build.
@@ -47,6 +48,7 @@ export const enableProfilerNestedUpdateScheduledHook =
 export const enableUpdaterTracking = __PROFILE__;
 
 export const enableSuspenseLayoutEffectSemantics = true;
+export const enableSuspenseAvoidThisFallback = false;
 
 // Logs additional User Timing API marks for use with an experimental profiling tool.
 export const enableSchedulingProfiler =
@@ -56,7 +58,6 @@ export const enableSchedulingProfiler =
 // For now, we'll turn it on for everyone because it's *already* on for everyone in practice.
 // At least this will let us stop shipping <Profiler> implementation to all users.
 export const enableSchedulerDebugging = true;
-
 export const warnAboutDeprecatedLifecycles = true;
 export const disableLegacyContext = __EXPERIMENTAL__;
 export const warnAboutStringRefs = false;
@@ -64,6 +65,7 @@ export const warnAboutDefaultPropsOnFunctionComponents = false;
 export const enableGetInspectorDataForInstanceInProduction = false;
 export const enableSuspenseServerRenderer = true;
 export const enableSelectiveHydration = true;
+export const warnAboutCallbackRefReturningFunction = true;
 
 export const enableLazyElements = true;
 export const enableCache = true;
@@ -96,6 +98,8 @@ export const allowConcurrentByDefault = true;
 export const deletedTreeCleanUpLevel = 3;
 
 export const enablePersistentOffscreenHostContainer = false;
+
+export const consoleManagedByDevToolsDuringStrictMode = true;
 
 // Flow magic to verify the exports of this file match the original version.
 // eslint-disable-next-line no-unused-vars

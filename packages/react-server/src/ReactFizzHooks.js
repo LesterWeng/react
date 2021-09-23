@@ -461,6 +461,21 @@ function useMutableSource<Source, Snapshot>(
   return getSnapshot(source._source);
 }
 
+function useSyncExternalStore<T>(
+  subscribe: (() => void) => () => void,
+  getSnapshot: () => T,
+  getServerSnapshot?: () => T,
+): T {
+  if (getServerSnapshot === undefined) {
+    invariant(
+      false,
+      'Missing getServerSnapshot, which is required for ' +
+        'server-rendered content. Will revert to client rendering.',
+    );
+  }
+  return getServerSnapshot();
+}
+
 function useDeferredValue<T>(value: T): T {
   resolveCurrentlyRenderingComponent();
   return value;
@@ -496,6 +511,7 @@ export const Dispatcher: DispatcherType = {
   useReducer,
   useRef,
   useState,
+  useInsertionEffect: noop,
   useLayoutEffect,
   useCallback,
   // useImperativeHandle is not run in the server environment
@@ -509,6 +525,7 @@ export const Dispatcher: DispatcherType = {
   useOpaqueIdentifier,
   // Subscriptions are not setup in a server environment.
   useMutableSource,
+  useSyncExternalStore,
 };
 
 if (enableCache) {

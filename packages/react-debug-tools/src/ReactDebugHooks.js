@@ -78,6 +78,7 @@ function getPrimitiveStackCache(): Map<string, Array<any>> {
         Dispatcher.useCacheRefresh();
       }
       Dispatcher.useLayoutEffect(() => {});
+      Dispatcher.useInsertionEffect(() => {});
       Dispatcher.useEffect(() => {});
       Dispatcher.useImperativeHandle(undefined, () => null);
       Dispatcher.useDebugValue(null);
@@ -191,6 +192,18 @@ function useLayoutEffect(
   });
 }
 
+function useInsertionEffect(
+  create: () => mixed,
+  inputs: Array<mixed> | void | null,
+): void {
+  nextHook();
+  hookLog.push({
+    primitive: 'InsertionEffect',
+    stackError: new Error(),
+    value: create,
+  });
+}
+
 function useEffect(
   create: () => (() => void) | void,
   inputs: Array<mixed> | void | null,
@@ -265,6 +278,25 @@ function useMutableSource<Source, Snapshot>(
   return value;
 }
 
+function useSyncExternalStore<T>(
+  subscribe: (() => void) => () => void,
+  getSnapshot: () => T,
+  getServerSnapshot?: () => T,
+): T {
+  // useSyncExternalStore() composes multiple hooks internally.
+  // Advance the current hook index the same number of times
+  // so that subsequent hooks have the right memoized state.
+  nextHook(); // SyncExternalStore
+  nextHook(); // Effect
+  const value = getSnapshot();
+  hookLog.push({
+    primitive: 'SyncExternalStore',
+    stackError: new Error(),
+    value,
+  });
+  return value;
+}
+
 function useTransition(): [boolean, (() => void) => void] {
   // useTransition() composes multiple hooks internally.
   // Advance the current hook index the same number of times
@@ -320,12 +352,14 @@ const Dispatcher: DispatcherType = {
   useImperativeHandle,
   useDebugValue,
   useLayoutEffect,
+  useInsertionEffect,
   useMemo,
   useReducer,
   useRef,
   useState,
   useTransition,
   useMutableSource,
+  useSyncExternalStore,
   useDeferredValue,
   useOpaqueIdentifier,
 };

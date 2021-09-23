@@ -1,13 +1,32 @@
 # React DevTools changelog
 
-<details>
-  <summary>
-    Changes that have landed in main but are not yet released.
-    Click to see more.
-  </summary>
+<!-- RELEASE_SCRIPT_TOKEN -->
 
-  <!-- Upcoming changes go here -->
-</details>
+## 4.18.0 (September 1, 2021)
+
+#### Features
+* DevTools: Improve named hooks network caching ([bvaughn](https://github.com/bvaughn) in [#22198](https://github.com/facebook/react/pull/22198))
+* Console Logging for StrictMode Double Rendering ([lunaruan](https://github.com/lunaruan) in [#22030](https://github.com/facebook/react/pull/22030))
+
+### Bugfix
+* Fix react-devtools-inline size issues ([lunaruan](https://github.com/lunaruan) in [#22232](https://github.com/facebook/react/pull/22232))
+* devtools: Don't display hook index of useContext ([eps1lon](https://github.com/eps1lon) in [#22200](https://github.com/facebook/react/pull/22200))
+* Throw error in console without interfering with logs ([lunaruan](https://github.com/lunaruan) in [#22175](https://github.com/facebook/react/pull/22175))
+
+
+## 4.17.0 (August 24, 2021)
+
+#### Features
+* Scheduling Profiler: Add network measures ([bvaughn](https://github.com/bvaughn) in [#22112](https://github.com/facebook/react/pull/22112))
+* Add options for disabling some features ([hbenl](https://github.com/hbenl) in [#22136](https://github.com/facebook/react/pull/22136))
+
+#### Bugfix
+* Fixed broken scroll-to error or warning feature ([bvaughn](https://github.com/bvaughn) and [eps1lon](https://github.com/eps1lon) in [#22147](https://github.com/facebook/react/pull/22147) and [#22144](https://github.com/facebook/react/pull/22144))
+* Replaced WeakMap with LRU for inspected element cache ([bvaughn](https://github.com/bvaughn) in [#22160](https://github.com/facebook/react/pull/22160))
+* Add more detailed error handling if profiling data does not have any React marks ([byronluk](https://github.com/byronluk) in [#22157](https://github.com/facebook/react/pull/22157))
+* Various named hooks bug fixes ([jstejada](https://github.com/jstejada) in [#22129](https://github.com/facebook/react/pull/22129), [#22128](https://github.com/facebook/react/pull/22128), [#22096](https://github.com/facebook/react/pull/22096), and [#22148](https://github.com/facebook/react/pull/22148))
+* Fix tooltip wheel event regression ([bvaughn](https://github.com/bvaughn) in [#22130](https://github.com/facebook/react/pull/22130))
+* Replace `source-map` library with `source-map-js` for named hooks source map parsing ([bvaughn](https://github.com/bvaughn) in [#22126](https://github.com/facebook/react/pull/22126))
 
 ## 4.16.0 (August 16, 2021)
 #### Features
@@ -166,7 +185,7 @@ Learn more about this change at [fb.me/devtools-unsupported-bridge-protocol](htt
 
 ## 4.12.4 (April 19, 2021)
 #### Bugfix
-* Remove `@octokit/rest` depedency because of a problem with transitive dependencies ([bvaughn](https://github.com/bvaughn) in [#21317](https://github.com/facebook/react/pull/21317))
+* Remove `@octokit/rest` dependency because of a problem with transitive dependencies ([bvaughn](https://github.com/bvaughn) in [#21317](https://github.com/facebook/react/pull/21317))
 
 ## 4.12.3 (April 19, 2021)
 #### Bugfix

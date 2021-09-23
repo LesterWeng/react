@@ -53,6 +53,7 @@
     "eslint-config-fbjs": "^3.1.1",
     "eslint-config-prettier": "^6.9.0",
     "eslint-plugin-babel": "^5.3.0",
+    "eslint-plugin-eslint-plugin": "^3.5.3",
     "eslint-plugin-flowtype": "^2.25.0",
     "eslint-plugin-jest": "^22.15.0",
     "eslint-plugin-jsx-a11y": "^6.3.1",
@@ -107,7 +108,7 @@
   "scripts": {
     "build": "node ./scripts/rollup/build.js",
     "build-combined": "node ./scripts/rollup/build-all-release-channels.js",
-    "build-for-devtools": "cross-env RELEASE_CHANNEL=experimental yarn build react/index,react/jsx,react-dom,react-is,react-debug-tools,scheduler,react-test-renderer,react-refresh --type=NODE && rm -rf build2 && mkdir build2 && cp -r ./build/node_modules build2/oss-experimental/",
+    "build-for-devtools": "cross-env RELEASE_CHANNEL=experimental yarn build react/index,react/jsx,react-dom,react-is,react-debug-tools,scheduler,react-test-renderer,react-refresh --type=NODE && rm -rf build && mkdir build && cp -r ./build/node_modules build/oss-experimental/",
     "build-for-devtools-dev": "yarn build-for-devtools --type=NODE_DEV",
     "build-for-devtools-prod": "yarn build-for-devtools --type=NODE_PROD",
     "linc": "node ./scripts/tasks/linc.js",
@@ -116,7 +117,6 @@
     "extract-errors": "yarn build --type=dev --extract-errors",
     "postinstall": "node node_modules/fbjs-scripts/node/check-dev-engines.js package.json && node ./scripts/flow/createFlowConfigs.js && node ./scripts/yarn/downloadReactIsForPrettyFormat.js",
     "debug-test": "yarn test --deprecated 'yarn test --debug'",
-    "generate-devtools-changelog": "node packages/react-devtools/get-commit-list.js",
     "test": "node ./scripts/jest/jest-cli.js",
     "test-stable": "node ./scripts/jest/jest-cli.js --release-channel=stable",
     "test-www": "node ./scripts/jest/jest-cli.js --release-channel=www-modern",
@@ -141,6 +141,9 @@
     "version-check": "node ./scripts/tasks/version-check.js",
     "merge-fork": "node ./scripts/merge-fork/merge-fork.js",
     "replace-fork": "node ./scripts/merge-fork/replace-fork.js",
-    "publish-prereleases": "node ./scripts/release/publish-using-ci-workflow.js"
+    "publish-prereleases": "node ./scripts/release/publish-using-ci-workflow.js",
+    "download-build": "node ./scripts/release/download-experimental-build.js",
+    "download-build-for-head": "node ./scripts/release/download-experimental-build.js --commit=$(git rev-parse HEAD)",
+    "download-build-in-codesandbox-ci": "cd scripts/release && yarn install && cd ../../ && yarn download-build-for-head"
   }
 }

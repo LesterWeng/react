@@ -7,7 +7,7 @@
  * @flow
  */
 
-// Keep in sync with https://github.com/facebook/flow/blob/master/lib/react.js
+// Keep in sync with https://github.com/facebook/flow/blob/main/lib/react.js
 export type StatelessFunctionalComponent<
   P,
 > = React$StatelessFunctionalComponent<P>;
@@ -67,9 +67,12 @@ export {
   useDeferredValue,
   useEffect,
   useImperativeHandle,
+  unstable_useInsertionEffect,
   useLayoutEffect,
   useMemo,
   useMutableSource,
+  useSyncExternalStore,
+  useSyncExternalStore as unstable_useSyncExternalStore,
   useReducer,
   useRef,
   useState,

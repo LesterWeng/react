@@ -33,6 +33,7 @@ export type HookType =
   | 'useContext'
   | 'useRef'
   | 'useEffect'
+  | 'useInsertionEffect'
   | 'useLayoutEffect'
   | 'useCallback'
   | 'useMemo'
@@ -41,6 +42,7 @@ export type HookType =
   | 'useDeferredValue'
   | 'useTransition'
   | 'useMutableSource'
+  | 'useSyncExternalStore'
   | 'useOpaqueIdentifier'
   | 'useCacheRefresh';
 
@@ -285,6 +287,10 @@ export type Dispatcher = {|
     create: () => (() => void) | void,
     deps: Array<mixed> | void | null,
   ): void,
+  useInsertionEffect(
+    create: () => (() => void) | void,
+    deps: Array<mixed> | void | null,
+  ): void,
   useLayoutEffect(
     create: () => (() => void) | void,
     deps: Array<mixed> | void | null,
@@ -304,6 +310,11 @@ export type Dispatcher = {|
     getSnapshot: MutableSourceGetSnapshotFn<Source, Snapshot>,
     subscribe: MutableSourceSubscribeFn<Source, Snapshot>,
   ): Snapshot,
+  useSyncExternalStore<T>(
+    subscribe: (() => void) => () => void,
+    getSnapshot: () => T,
+    getServerSnapshot?: () => T,
+  ): T,
   useOpaqueIdentifier(): any,
   useCacheRefresh?: () => <T>(?() => T, ?T) => void,
 

@@ -1480,10 +1480,21 @@ const startClientRenderedSuspenseBoundary = stringToPrecomputedChunk(
 );
 const endSuspenseBoundary = stringToPrecomputedChunk('<!--/$-->');
 
+export function pushStartCompletedSuspenseBoundary(
+  target: Array<Chunk | PrecomputedChunk>,
+) {
+  target.push(startCompletedSuspenseBoundary);
+}
+
+export function pushEndCompletedSuspenseBoundary(
+  target: Array<Chunk | PrecomputedChunk>,
+) {
+  target.push(endSuspenseBoundary);
+}
+
 export function writeStartCompletedSuspenseBoundary(
   destination: Destination,
   responseState: ResponseState,
-  id: SuspenseBoundaryID,
 ): boolean {
   return writeChunk(destination, startCompletedSuspenseBoundary);
 }
@@ -1497,7 +1508,6 @@ export function writeStartPendingSuspenseBoundary(
 export function writeStartClientRenderedSuspenseBoundary(
   destination: Destination,
   responseState: ResponseState,
-  id: SuspenseBoundaryID,
 ): boolean {
   return writeChunk(destination, startClientRenderedSuspenseBoundary);
 }
@@ -1706,7 +1716,7 @@ export function writeEndSegment(
 //   // Clear all the existing children. This is complicated because
 //   // there can be embedded Suspense boundaries in the fallback.
 //   // This is similar to clearSuspenseBoundary in ReactDOMHostConfig.
-//   // TOOD: We could avoid this if we never emitted suspense boundaries in fallback trees.
+//   // TODO: We could avoid this if we never emitted suspense boundaries in fallback trees.
 //   // They never hydrate anyway. However, currently we support incrementally loading the fallback.
 //   const parentInstance = suspenseNode.parentNode;
 //   let node = suspenseNode.nextSibling;

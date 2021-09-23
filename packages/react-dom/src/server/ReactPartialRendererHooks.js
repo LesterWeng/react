@@ -385,6 +385,22 @@ function useRef<T>(initialValue: T): {|current: T|} {
   }
 }
 
+function useInsertionEffect(
+  create: () => mixed,
+  inputs: Array<mixed> | void | null,
+) {
+  if (__DEV__) {
+    currentHookNameInDev = 'useInsertionEffect';
+    console.error(
+      'useInsertionEffect does nothing on the server, because its effect cannot ' +
+        "be encoded into the server renderer's output format. This will lead " +
+        'to a mismatch between the initial, non-hydrated UI and the intended ' +
+        'UI. To avoid this, useInsertionEffect should only be used in ' +
+        'components that render exclusively on the client.',
+    );
+  }
+}
+
 export function useLayoutEffect(
   create: () => (() => void) | void,
   inputs: Array<mixed> | void | null,
@@ -462,6 +478,21 @@ function useMutableSource<Source, Snapshot>(
   return getSnapshot(source._source);
 }
 
+function useSyncExternalStore<T>(
+  subscribe: (() => void) => () => void,
+  getSnapshot: () => T,
+  getServerSnapshot?: () => T,
+): T {
+  if (getServerSnapshot === undefined) {
+    invariant(
+      false,
+      'Missing getServerSnapshot, which is required for ' +
+        'server-rendered content. Will revert to client rendering.',
+    );
+  }
+  return getServerSnapshot();
+}
+
 function useDeferredValue<T>(value: T): T {
   resolveCurrentlyRenderingComponent();
   return value;
@@ -501,6 +532,7 @@ export const Dispatcher: DispatcherType = {
   useReducer,
   useRef,
   useState,
+  useInsertionEffect,
   useLayoutEffect,
   useCallback,
   // useImperativeHandle is not run in the server environment
@@ -514,6 +546,7 @@ export const Dispatcher: DispatcherType = {
   useOpaqueIdentifier,
   // Subscriptions are not setup in a server environment.
   useMutableSource,
+  useSyncExternalStore,
 };
 
 if (enableCache) {
