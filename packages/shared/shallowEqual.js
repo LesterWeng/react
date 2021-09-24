@@ -15,7 +15,7 @@ import hasOwnProperty from './hasOwnProperty';
  * when any key has values which are not strictly equal between the arguments.
  * Returns true when the values of all keys are strictly equal.
  */
-// FEATURE:(shallowEqual)
+// Util-shallowEqual
 function shallowEqual(objA: mixed, objB: mixed): boolean {
   if (is(objA, objB)) {
     return true;

@@ -321,7 +321,7 @@ function throwInvalidHookError() {
   );
 }
 
-// FEATURE:(areHookInputsEqual，hook deps对比)
+// Util-areHookInputsEqual:(hook deps对比)
 function areHookInputsEqual(
   nextDeps: Array<mixed>,
   prevDeps: Array<mixed> | null,

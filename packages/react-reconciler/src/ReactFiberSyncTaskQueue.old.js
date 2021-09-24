@@ -38,7 +38,6 @@ export function scheduleLegacySyncCallback(callback: SchedulerCallback) {
   scheduleSyncCallback(callback);
 }
 
-// FEATURE:(flushSyncCallbacksOnlyInLegacyMode，仅用于batchedUpdates)
 export function flushSyncCallbacksOnlyInLegacyMode() {
   // Only flushes the queue if there's a legacy sync callback scheduled.
   // TODO: There's only a single type of callback: performSyncOnWorkOnRoot. So

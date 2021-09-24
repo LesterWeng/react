@@ -27,7 +27,6 @@ let flushSyncImpl = function() {};
 
 let isInsideEventHandler = false;
 
-// FEATURE:(finishEventHandler)
 function finishEventHandler() {
   // Here we wait until all updates have propagated, which is important
   // when using controlled components within layers:

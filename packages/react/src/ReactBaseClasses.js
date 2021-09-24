@@ -54,7 +54,7 @@ Component.prototype.isReactComponent = {};
  * @final
  * @protected
  */
-// Feature-this.setState
+// API-this.setState
 Component.prototype.setState = function(partialState, callback) {
   invariant(
     typeof partialState === 'object' ||

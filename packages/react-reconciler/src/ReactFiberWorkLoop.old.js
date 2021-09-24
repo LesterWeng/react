@@ -1158,7 +1158,7 @@ export function deferredUpdates<A>(fn: () => A): A {
   }
 }
 
-// FEATURE:(batchUpdates)
+// API-batchUpdates
 export function batchedUpdates<A, R>(fn: A => R, a: A): R {
   const prevExecutionContext = executionContext;
   executionContext |= BatchedContext;
