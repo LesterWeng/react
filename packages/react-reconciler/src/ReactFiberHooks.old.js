@@ -17,7 +17,6 @@ import type {Fiber, Dispatcher, HookType} from './ReactInternalTypes';
 import type {Lanes, Lane} from './ReactFiberLane.old';
 import type {HookFlags} from './ReactHookEffectTags';
 import type {FiberRoot} from './ReactInternalTypes';
-import type {OpaqueIDType} from './ReactFiberHostConfig';
 import type {Cache} from './ReactFiberCacheComponent.old';
 import type {Flags} from './ReactFiberFlags';
 
@@ -31,6 +30,7 @@ import {
   enableStrictEffects,
   enableLazyContextPropagation,
   enableSuspenseLayoutEffectSemantics,
+  enableUseMutableSource,
 } from 'shared/ReactFeatureFlags';
 
 import {
@@ -82,13 +82,10 @@ import {
   scheduleUpdateOnFiber,
   requestUpdateLane,
   requestEventTime,
-  warnIfNotCurrentlyActingEffectsInDEV,
-  warnIfNotCurrentlyActingUpdatesInDev,
   markSkippedUpdateLanes,
   isInterleavedUpdate,
 } from './ReactFiberWorkLoop.old';
 
-import invariant from 'shared/invariant';
 import getComponentNameFromFiber from 'react-reconciler/src/getComponentNameFromFiber';
 import is from 'shared/objectIs';
 import isArray from 'shared/isArray';
@@ -98,34 +95,29 @@ import {
 } from './ReactFiberBeginWork.old';
 import {getIsHydrating} from './ReactFiberHydrationContext.old';
 import {
-  makeClientId,
-  makeClientIdInDEV,
-  makeOpaqueHydratingObject,
-} from './ReactFiberHostConfig';
-import {
   getWorkInProgressVersion,
   markSourceAsDirty,
   setWorkInProgressVersion,
   warnAboutMultipleRenderersDEV,
 } from './ReactMutableSource.old';
-import {getIsRendering} from './ReactCurrentFiber';
 import {logStateUpdateScheduled} from './DebugTracing';
 import {markStateUpdateScheduled} from './SchedulingProfiler';
-import {CacheContext} from './ReactFiberCacheComponent.old';
+import {createCache, CacheContext} from './ReactFiberCacheComponent.old';
 import {
-  createUpdate,
-  enqueueUpdate,
-  entangleTransitions,
+  createUpdate as createLegacyQueueUpdate,
+  enqueueUpdate as enqueueLegacyQueueUpdate,
+  entangleTransitions as entangleLegacyQueueTransitions,
 } from './ReactUpdateQueue.old';
 import {pushInterleavedQueue} from './ReactFiberInterleavedUpdates.old';
 import {warnOnSubscriptionInsideStartTransition} from 'shared/ReactFeatureFlags';
+import {getTreeId} from './ReactFiberTreeContext.old';
 
 const {ReactCurrentDispatcher, ReactCurrentBatchConfig} = ReactSharedInternals;
 
 type Update<S, A> = {|
   lane: Lane,
   action: A,
-  eagerReducer: ((S, A) => S) | null,
+  hasEagerState: boolean,
   eagerState: S | null,
   next: Update<S, A>,
 |};
@@ -140,10 +132,8 @@ export type UpdateQueue<S, A> = {|
 |};
 
 let didWarnAboutMismatchedHooksForComponent;
-let didWarnAboutUseOpaqueIdentifier;
 let didWarnUncachedGetSnapshot;
 if (__DEV__) {
-  didWarnAboutUseOpaqueIdentifier = {};
   didWarnAboutMismatchedHooksForComponent = new Set();
 }
 
@@ -205,6 +195,12 @@ let didScheduleRenderPhaseUpdate: boolean = false;
 // TODO: Maybe there's some way to consolidate this with
 // `didScheduleRenderPhaseUpdate`. Or with `numberOfReRenders`.
 let didScheduleRenderPhaseUpdateDuringThisPass: boolean = false;
+// Counts the number of useId hooks in this component.
+let localIdCounter: number = 0;
+// Used for ids that are generated completely client-side (i.e. not during
+// hydration). This counter is global, so client ids are not stable across
+// render attempts.
+let globalClientIdCounter: number = 0;
 
 const RE_RENDER_LIMIT = 25;
 
@@ -310,8 +306,7 @@ function warnOnHookMismatchInDev(currentHookName: HookType) {
 }
 
 function throwInvalidHookError() {
-  invariant(
-    false,
+  throw new Error(
     'Invalid hook call. Hooks can only be called inside of the body of a function component. This could happen for' +
       ' one of the following reasons:\n' +
       '1. You might have mismatching versions of React and the renderer (such as React DOM)\n' +
@@ -400,6 +395,7 @@ export function renderWithHooks<Props, SecondArg>(
   // workInProgressHook = null;
 
   // didScheduleRenderPhaseUpdate = false;
+  // localIdCounter = 0;
 
   // TODO Warn if no hooks are used at all during mount, then some are used during update.
   // Currently we will identify the update render as a mount because memoizedState === null.
@@ -439,11 +435,14 @@ export function renderWithHooks<Props, SecondArg>(
     let numberOfReRenders: number = 0;
     do {
       didScheduleRenderPhaseUpdateDuringThisPass = false;
-      invariant(
-        numberOfReRenders < RE_RENDER_LIMIT,
-        'Too many re-renders. React limits the number of renders to prevent ' +
-          'an infinite loop.',
-      );
+      localIdCounter = 0;
+
+      if (numberOfReRenders >= RE_RENDER_LIMIT) {
+        throw new Error(
+          'Too many re-renders. React limits the number of renders to prevent ' +
+            'an infinite loop.',
+        );
+      }
 
       numberOfReRenders += 1;
       if (__DEV__) {
@@ -518,12 +517,15 @@ export function renderWithHooks<Props, SecondArg>(
   }
 
   didScheduleRenderPhaseUpdate = false;
+  // This is reset by checkDidRenderIdHook
+  // localIdCounter = 0;
 
-  invariant(
-    !didRenderTooFewHooks,
-    'Rendered fewer hooks than expected. This may be caused by an accidental ' +
-      'early return statement.',
-  );
+  if (didRenderTooFewHooks) {
+    throw new Error(
+      'Rendered fewer hooks than expected. This may be caused by an accidental ' +
+        'early return statement.',
+    );
+  }
 
   if (enableLazyContextPropagation) {
     if (current !== null) {
@@ -545,8 +547,16 @@ export function renderWithHooks<Props, SecondArg>(
       }
     }
   }
-
   return children;
+}
+
+export function checkDidRenderIdHook() {
+  // This should be called immediately after every renderWithHooks call.
+  // Conceptually, it's part of the return value of renderWithHooks; it's only a
+  // separate function to avoid using an array tuple.
+  const didRenderIdHook = localIdCounter !== 0;
+  localIdCounter = 0;
+  return didRenderIdHook;
 }
 
 export function bailoutHooks(
@@ -615,6 +625,7 @@ export function resetHooksAfterThrow(): void {
   }
 
   didScheduleRenderPhaseUpdateDuringThisPass = false;
+  localIdCounter = 0;
 }
 
 // CHILDPHASE:(mountWorkInProgressHook)
@@ -678,10 +689,10 @@ function updateWorkInProgressHook(): Hook {
   } else {
     // Clone from the current hook.
 
-    invariant(
-      nextCurrentHook !== null,
-      'Rendered more hooks than during the previous render.',
-    );
+    if (nextCurrentHook === null) {
+      throw new Error('Rendered more hooks than during the previous render.');
+    }
+
     currentHook = nextCurrentHook;
 
     const newHook: Hook = {
@@ -740,7 +751,7 @@ function mountReducer<S, I, A>(
     lastRenderedState: (initialState: any),
   };
   hook.queue = queue;
-  const dispatch: Dispatch<A> = (queue.dispatch = (dispatchAction.bind(
+  const dispatch: Dispatch<A> = (queue.dispatch = (dispatchReducerAction.bind(
     null,
     currentlyRenderingFiber,
     queue,
@@ -755,10 +766,12 @@ function updateReducer<S, I, A>(
 ): [S, Dispatch<A>] {
   const hook = updateWorkInProgressHook();
   const queue = hook.queue;
-  invariant(
-    queue !== null,
-    'Should have a queue. This is likely a bug in React. Please file an issue.',
-  );
+
+  if (queue === null) {
+    throw new Error(
+      'Should have a queue. This is likely a bug in React. Please file an issue.',
+    );
+  }
 
   queue.lastRenderedReducer = reducer;
 
@@ -811,7 +824,7 @@ function updateReducer<S, I, A>(
         const clone: Update<S, A> = {
           lane: updateLane,
           action: update.action,
-          eagerReducer: update.eagerReducer,
+          hasEagerState: update.hasEagerState,
           eagerState: update.eagerState,
           next: (null: any),
         };
@@ -839,7 +852,7 @@ function updateReducer<S, I, A>(
             // this will never be skipped by the check above.
             lane: NoLane,
             action: update.action,
-            eagerReducer: update.eagerReducer,
+            hasEagerState: update.hasEagerState,
             eagerState: update.eagerState,
             next: (null: any),
           };
@@ -847,9 +860,9 @@ function updateReducer<S, I, A>(
         }
 
         // Process this update.
-        if (update.eagerReducer === reducer) {
-          // If this update was processed eagerly, and its reducer matches the
-          // current reducer, we can use the eagerly computed state.
+        if (update.hasEagerState) {
+          // If this update is a state update (not a reducer) and was processed eagerly,
+          // we can use the eagerly computed state
           newState = ((update.eagerState: any): S);
         } else {
           const action = update.action;
@@ -911,10 +924,12 @@ function rerenderReducer<S, I, A>(
 ): [S, Dispatch<A>] {
   const hook = updateWorkInProgressHook();
   const queue = hook.queue;
-  invariant(
-    queue !== null,
-    'Should have a queue. This is likely a bug in React. Please file an issue.',
-  );
+
+  if (queue === null) {
+    throw new Error(
+      'Should have a queue. This is likely a bug in React. Please file an issue.',
+    );
+  }
 
   queue.lastRenderedReducer = reducer;
 
@@ -1048,8 +1063,7 @@ function readFromUnsubscribedMutableSource<Source, Snapshot>(
 
     // We expect this error not to be thrown during the synchronous retry,
     // because we blocked interleaved mutations.
-    invariant(
-      false,
+    throw new Error(
       'Cannot read from mutable source during the current render without tearing. This may be a bug in React. Please file an issue.',
     );
   }
@@ -1061,11 +1075,17 @@ function useMutableSource<Source, Snapshot>(
   getSnapshot: MutableSourceGetSnapshotFn<Source, Snapshot>,
   subscribe: MutableSourceSubscribeFn<Source, Snapshot>,
 ): Snapshot {
+  if (!enableUseMutableSource) {
+    return (undefined: any);
+  }
+
   const root = ((getWorkInProgressRoot(): any): FiberRoot);
-  invariant(
-    root !== null,
-    'Expected a work-in-progress root. This is a bug in React. Please file an issue.',
-  );
+
+  if (root === null) {
+    throw new Error(
+      'Expected a work-in-progress root. This is a bug in React. Please file an issue.',
+    );
+  }
 
   const getVersion = source._getVersion;
   const version = getVersion(source._source);
@@ -1201,7 +1221,7 @@ function useMutableSource<Source, Snapshot>(
       lastRenderedReducer: basicStateReducer,
       lastRenderedState: snapshot,
     };
-    newQueue.dispatch = setSnapshot = (dispatchAction.bind(
+    newQueue.dispatch = setSnapshot = (dispatchSetState.bind(
       null,
       currentlyRenderingFiber,
       newQueue,
@@ -1220,6 +1240,10 @@ function mountMutableSource<Source, Snapshot>(
   getSnapshot: MutableSourceGetSnapshotFn<Source, Snapshot>,
   subscribe: MutableSourceSubscribeFn<Source, Snapshot>,
 ): Snapshot {
+  if (!enableUseMutableSource) {
+    return (undefined: any);
+  }
+
   const hook = mountWorkInProgressHook();
   hook.memoizedState = ({
     refs: {
@@ -1237,6 +1261,10 @@ function updateMutableSource<Source, Snapshot>(
   getSnapshot: MutableSourceGetSnapshotFn<Source, Snapshot>,
   subscribe: MutableSourceSubscribeFn<Source, Snapshot>,
 ): Snapshot {
+  if (!enableUseMutableSource) {
+    return (undefined: any);
+  }
+
   const hook = updateWorkInProgressHook();
   return useMutableSource(hook, source, getSnapshot, subscribe);
 }
@@ -1253,8 +1281,7 @@ function mountSyncExternalStore<T>(
   const isHydrating = getIsHydrating();
   if (isHydrating) {
     if (getServerSnapshot === undefined) {
-      invariant(
-        false,
+      throw new Error(
         'Missing getServerSnapshot, which is required for ' +
           'server-rendered content. Will revert to client rendering.',
       );
@@ -1290,10 +1317,13 @@ function mountSyncExternalStore<T>(
     // the content is stale, it's already visible anyway. Instead we'll patch
     // it up in a passive effect.
     const root: FiberRoot | null = getWorkInProgressRoot();
-    invariant(
-      root !== null,
-      'Expected a work-in-progress root. This is a bug in React. Please file an issue.',
-    );
+
+    if (root === null) {
+      throw new Error(
+        'Expected a work-in-progress root. This is a bug in React. Please file an issue.',
+      );
+    }
+
     if (!includesBlockingLane(root, renderLanes)) {
       pushStoreConsistencyCheck(fiber, getSnapshot, nextSnapshot);
     }
@@ -1387,10 +1417,13 @@ function updateSyncExternalStore<T>(
     // Right before committing, we will walk the tree and check if any of the
     // stores were mutated.
     const root: FiberRoot | null = getWorkInProgressRoot();
-    invariant(
-      root !== null,
-      'Expected a work-in-progress root. This is a bug in React. Please file an issue.',
-    );
+
+    if (root === null) {
+      throw new Error(
+        'Expected a work-in-progress root. This is a bug in React. Please file an issue.',
+      );
+    }
+
     if (!includesBlockingLane(root, renderLanes)) {
       pushStoreConsistencyCheck(fiber, getSnapshot, nextSnapshot);
     }
@@ -1492,7 +1525,7 @@ function mountState<S>(
   hook.queue = queue;
   const dispatch: Dispatch<
     BasicStateAction<S>,
-  > = (queue.dispatch = (dispatchAction.bind(
+  > = (queue.dispatch = (dispatchSetState.bind(
     null,
     currentlyRenderingFiber,
     queue,
@@ -1545,6 +1578,7 @@ function pushEffect(tag, create, destroy, deps) {
 let stackContainsErrorMessage: boolean | null = null;
 
 function getCallerStackFrame(): string {
+  // eslint-disable-next-line react-internal/prod-error-codes
   const stackFrames = new Error('Error message').stack.split('\n');
 
   // Some browsers (e.g. Chrome) include the error message in the stack
@@ -1679,12 +1713,6 @@ function mountEffect(
   create: () => (() => void) | void,
   deps: Array<mixed> | void | null,
 ): void {
-  if (__DEV__) {
-    // $FlowExpectedError - jest isn't a global, and isn't recognized outside of tests
-    if ('undefined' !== typeof jest) {
-      warnIfNotCurrentlyActingEffectsInDEV(currentlyRenderingFiber);
-    }
-  }
   if (
     __DEV__ &&
     enableStrictEffects &&
@@ -1710,12 +1738,6 @@ function updateEffect(
   create: () => (() => void) | void,
   deps: Array<mixed> | void | null,
 ): void {
-  if (__DEV__) {
-    // $FlowExpectedError - jest isn't a global, and isn't recognized outside of tests
-    if ('undefined' !== typeof jest) {
-      warnIfNotCurrentlyActingEffectsInDEV(currentlyRenderingFiber);
-    }
-  }
   return updateEffectImpl(PassiveEffect, HookPassive, create, deps);
 }
 
@@ -2026,91 +2048,36 @@ export function getIsUpdatingOpaqueValueInRenderPhaseInDEV(): boolean | void {
   }
 }
 
-function warnOnOpaqueIdentifierAccessInDEV(fiber) {
-  if (__DEV__) {
-    // TODO: Should warn in effects and callbacks, too
-    const name = getComponentNameFromFiber(fiber) || 'Unknown';
-    if (getIsRendering() && !didWarnAboutUseOpaqueIdentifier[name]) {
-      console.error(
-        'The object passed back from useOpaqueIdentifier is meant to be ' +
-          'passed through to attributes only. Do not read the ' +
-          'value directly.',
-      );
-      didWarnAboutUseOpaqueIdentifier[name] = true;
-    }
-  }
-}
+function mountId(): string {
+  const hook = mountWorkInProgressHook();
 
-function mountOpaqueIdentifier(): OpaqueIDType | void {
-  const makeId = __DEV__
-    ? makeClientIdInDEV.bind(
-        null,
-        warnOnOpaqueIdentifierAccessInDEV.bind(null, currentlyRenderingFiber),
-      )
-    : makeClientId;
-
+  let id;
   if (getIsHydrating()) {
-    let didUpgrade = false;
-    const fiber = currentlyRenderingFiber;
-    const readValue = () => {
-      if (!didUpgrade) {
-        // Only upgrade once. This works even inside the render phase because
-        // the update is added to a shared queue, which outlasts the
-        // in-progress render.
-        didUpgrade = true;
-        if (__DEV__) {
-          isUpdatingOpaqueValueInRenderPhase = true;
-          setId(makeId());
-          isUpdatingOpaqueValueInRenderPhase = false;
-          warnOnOpaqueIdentifierAccessInDEV(fiber);
-        } else {
-          setId(makeId());
-        }
-      }
-      invariant(
-        false,
-        'The object passed back from useOpaqueIdentifier is meant to be ' +
-          'passed through to attributes only. Do not read the value directly.',
-      );
-    };
-    const id = makeOpaqueHydratingObject(readValue);
+    const treeId = getTreeId();
 
-    const setId = mountState(id)[1];
+    // Use a captial R prefix for server-generated ids.
+    id = 'R:' + treeId;
 
-    if ((currentlyRenderingFiber.mode & ConcurrentMode) === NoMode) {
-      if (
-        __DEV__ &&
-        enableStrictEffects &&
-        (currentlyRenderingFiber.mode & StrictEffectsMode) === NoMode
-      ) {
-        currentlyRenderingFiber.flags |= MountPassiveDevEffect | PassiveEffect;
-      } else {
-        currentlyRenderingFiber.flags |= PassiveEffect;
-      }
-      pushEffect(
-        HookHasEffect | HookPassive,
-        () => {
-          setId(makeId());
-        },
-        undefined,
-        null,
-      );
+    // Unless this is the first id at this level, append a number at the end
+    // that represents the position of this useId hook among all the useId
+    // hooks for this fiber.
+    const localId = localIdCounter++;
+    if (localId > 0) {
+      id += ':' + localId.toString(32);
     }
-    return id;
   } else {
-    const id = makeId();
-    mountState(id);
-    return id;
+    // Use a lowercase r prefix for client-generated ids.
+    const globalClientId = globalClientIdCounter++;
+    id = 'r:' + globalClientId.toString(32);
   }
-}
 
-function updateOpaqueIdentifier(): OpaqueIDType | void {
-  const id = updateState(undefined)[0];
+  hook.memoizedState = id;
   return id;
 }
 
-function rerenderOpaqueIdentifier(): OpaqueIDType | void {
-  const id = rerenderState(undefined)[0];
+function updateId(): string {
+  const hook = updateWorkInProgressHook();
+  const id: string = hook.memoizedState;
   return id;
 }
 
@@ -2129,6 +2096,9 @@ function updateRefresh() {
 }
 
 function refreshCache<T>(fiber: Fiber, seedKey: ?() => T, seedValue: T) {
+  if (!enableCache) {
+    return;
+  }
   // TODO: Does Cache work in legacy mode? Should decide and write a test.
   // TODO: Consider warning if the refresh is at discrete priority, or if we
   // otherwise suspect that it wasn't batched properly.
@@ -2141,23 +2111,26 @@ function refreshCache<T>(fiber: Fiber, seedKey: ?() => T, seedValue: T) {
         const eventTime = requestEventTime();
         const root = scheduleUpdateOnFiber(provider, lane, eventTime);
         if (root !== null) {
-          entangleTransitions(root, provider, lane);
+          entangleLegacyQueueTransitions(root, provider, lane);
         }
 
-        const seededCache = new Map();
+        // TODO: If a refresh never commits, the new cache created here must be
+        // released. A simple case is start refreshing a cache boundary, but then
+        // unmount that boundary before the refresh completes.
+        const seededCache = createCache();
         if (seedKey !== null && seedKey !== undefined && root !== null) {
           // Seed the cache with the value passed by the caller. This could be
           // from a server mutation, or it could be a streaming response.
-          seededCache.set(seedKey, seedValue);
+          seededCache.data.set(seedKey, seedValue);
         }
 
         // Schedule an update on the cache boundary to trigger a refresh.
-        const refreshUpdate = createUpdate(eventTime, lane);
+        const refreshUpdate = createLegacyQueueUpdate(eventTime, lane);
         const payload = {
           cache: seededCache,
         };
         refreshUpdate.payload = payload;
-        enqueueUpdate(provider, refreshUpdate, lane);
+        enqueueLegacyQueueUpdate(provider, refreshUpdate, lane);
         return;
       }
     }
@@ -2166,8 +2139,7 @@ function refreshCache<T>(fiber: Fiber, seedKey: ?() => T, seedValue: T) {
   // TODO: Warn if unmounted?
 }
 
-//CHILDPHASE:(dispatchAction，这里bind的fiber无法改变，因此双缓存切换时只能修改对象属性而不能新建对象)
-function dispatchAction<S, A>(
+function dispatchReducerAction<S, A>(
   fiber: Fiber,
   queue: UpdateQueue<S, A>,
   action: A,
@@ -2182,63 +2154,62 @@ function dispatchAction<S, A>(
     }
   }
 
-  const eventTime = requestEventTime();
-  // RECORD:获取更新lane（同步模式下就是1）
   const lane = requestUpdateLane(fiber);
 
   // STRUCT:(update，位于hook.queue.pending，环形链表)
   const update: Update<S, A> = {
     lane,
     action,
-    eagerReducer: null,
+    hasEagerState: false,
     eagerState: null,
     next: (null: any),
   };
 
-  const alternate = fiber.alternate;
-  if (
-    fiber === currentlyRenderingFiber ||
-    (alternate !== null && alternate === currentlyRenderingFiber)
-  ) {
-    // This is a render phase update. Stash it in a lazily-created map of
-    // queue -> linked list of updates. After this render pass, we'll restart
-    // and apply the stashed updates on top of the work-in-progress hook.
-    didScheduleRenderPhaseUpdateDuringThisPass = didScheduleRenderPhaseUpdate = true;
-    const pending = queue.pending;
-    if (pending === null) {
-      // This is the first update. Create a circular list.
-      update.next = update;
-    } else {
-      update.next = pending.next;
-      pending.next = update;
-    }
-    queue.pending = update;
+  if (isRenderPhaseUpdate(fiber)) {
+    enqueueRenderPhaseUpdate(queue, update);
   } else {
-    if (isInterleavedUpdate(fiber, lane)) {
-      const interleaved = queue.interleaved;
-      if (interleaved === null) {
-        // This is the first update. Create a circular list.
-        update.next = update;
-        // At the end of the current render, this queue's interleaved updates will
-        // be transferred to the pending queue.
-        pushInterleavedQueue(queue);
-      } else {
-        update.next = interleaved.next;
-        interleaved.next = update;
-      }
-      queue.interleaved = update;
-    } else {
-      const pending = queue.pending;
-      if (pending === null) {
-        // This is the first update. Create a circular list.
-        update.next = update;
-      } else {
-        update.next = pending.next;
-        pending.next = update;
-      }
-      queue.pending = update;
+    enqueueUpdate(fiber, queue, update, lane);
+    const eventTime = requestEventTime();
+    const root = scheduleUpdateOnFiber(fiber, lane, eventTime);
+    if (root !== null) {
+      entangleTransitionUpdate(root, queue, lane);
     }
+  }
 
+  markUpdateInDevTools(fiber, lane, action);
+}
+
+function dispatchSetState<S, A>(
+  fiber: Fiber,
+  queue: UpdateQueue<S, A>,
+  action: A,
+) {
+  if (__DEV__) {
+    if (typeof arguments[3] === 'function') {
+      console.error(
+        "State updates from the useState() and useReducer() Hooks don't support the " +
+          'second callback argument. To execute a side effect after ' +
+          'rendering, declare it in the component body with useEffect().',
+      );
+    }
+  }
+
+  const lane = requestUpdateLane(fiber);
+
+  const update: Update<S, A> = {
+    lane,
+    action,
+    hasEagerState: false,
+    eagerState: null,
+    next: (null: any),
+  };
+
+  if (isRenderPhaseUpdate(fiber)) {
+    enqueueRenderPhaseUpdate(queue, update);
+  } else {
+    enqueueUpdate(fiber, queue, update, lane);
+
+    const alternate = fiber.alternate;
     if (
       fiber.lanes === NoLanes &&
       (alternate === null || alternate.lanes === NoLanes)
@@ -2260,7 +2231,7 @@ function dispatchAction<S, A>(
           // it, on the update object. If the reducer hasn't changed by the
           // time we enter the render phase, then the eager state can be used
           // without calling the reducer again.
-          update.eagerReducer = lastRenderedReducer;
+          update.hasEagerState = true;
           update.eagerState = eagerState;
           if (is(eagerState, currentState)) {
             // Fast path. We can bail out without scheduling React to re-render.
@@ -2278,35 +2249,101 @@ function dispatchAction<S, A>(
         }
       }
     }
-    if (__DEV__) {
-      // $FlowExpectedError - jest isn't a global, and isn't recognized outside of tests
-      if ('undefined' !== typeof jest) {
-        warnIfNotCurrentlyActingUpdatesInDev(fiber);
-      }
-    }
-    // RECORD:(这里的fiber只是两个fiber中的一个，此次可能作为wip fiber，也可能作为current fiber)
+    const eventTime = requestEventTime();
     const root = scheduleUpdateOnFiber(fiber, lane, eventTime);
-
-    if (isTransitionLane(lane) && root !== null) {
-      let queueLanes = queue.lanes;
-
-      // If any entangled lanes are no longer pending on the root, then they
-      // must have finished. We can remove them from the shared queue, which
-      // represents a superset of the actually pending lanes. In some cases we
-      // may entangle more than we need to, but that's OK. In fact it's worse if
-      // we *don't* entangle when we should.
-      queueLanes = intersectLanes(queueLanes, root.pendingLanes);
-
-      // Entangle the new transition lane with the other transition lanes.
-      const newQueueLanes = mergeLanes(queueLanes, lane);
-      queue.lanes = newQueueLanes;
-      // Even if queue.lanes already include lane, we don't know for certain if
-      // the lane finished since the last time we entangled it. So we need to
-      // entangle it again, just to be sure.
-      markRootEntangled(root, newQueueLanes);
+    if (root !== null) {
+      entangleTransitionUpdate(root, queue, lane);
     }
   }
 
+  markUpdateInDevTools(fiber, lane, action);
+}
+
+function isRenderPhaseUpdate(fiber: Fiber) {
+  const alternate = fiber.alternate;
+  return (
+    fiber === currentlyRenderingFiber ||
+    (alternate !== null && alternate === currentlyRenderingFiber)
+  );
+}
+
+function enqueueRenderPhaseUpdate<S, A>(
+  queue: UpdateQueue<S, A>,
+  update: Update<S, A>,
+) {
+  // This is a render phase update. Stash it in a lazily-created map of
+  // queue -> linked list of updates. After this render pass, we'll restart
+  // and apply the stashed updates on top of the work-in-progress hook.
+  didScheduleRenderPhaseUpdateDuringThisPass = didScheduleRenderPhaseUpdate = true;
+  const pending = queue.pending;
+  if (pending === null) {
+    // This is the first update. Create a circular list.
+    update.next = update;
+  } else {
+    update.next = pending.next;
+    pending.next = update;
+  }
+  queue.pending = update;
+}
+
+function enqueueUpdate<S, A>(
+  fiber: Fiber,
+  queue: UpdateQueue<S, A>,
+  update: Update<S, A>,
+  lane: Lane,
+) {
+  if (isInterleavedUpdate(fiber, lane)) {
+    const interleaved = queue.interleaved;
+    if (interleaved === null) {
+      // This is the first update. Create a circular list.
+      update.next = update;
+      // At the end of the current render, this queue's interleaved updates will
+      // be transferred to the pending queue.
+      pushInterleavedQueue(queue);
+    } else {
+      update.next = interleaved.next;
+      interleaved.next = update;
+    }
+    queue.interleaved = update;
+  } else {
+    const pending = queue.pending;
+    if (pending === null) {
+      // This is the first update. Create a circular list.
+      update.next = update;
+    } else {
+      update.next = pending.next;
+      pending.next = update;
+    }
+    queue.pending = update;
+  }
+}
+
+function entangleTransitionUpdate<S, A>(
+  root: FiberRoot,
+  queue: UpdateQueue<S, A>,
+  lane: Lane,
+) {
+  if (isTransitionLane(lane)) {
+    let queueLanes = queue.lanes;
+
+    // If any entangled lanes are no longer pending on the root, then they
+    // must have finished. We can remove them from the shared queue, which
+    // represents a superset of the actually pending lanes. In some cases we
+    // may entangle more than we need to, but that's OK. In fact it's worse if
+    // we *don't* entangle when we should.
+    queueLanes = intersectLanes(queueLanes, root.pendingLanes);
+
+    // Entangle the new transition lane with the other transition lanes.
+    const newQueueLanes = mergeLanes(queueLanes, lane);
+    queue.lanes = newQueueLanes;
+    // Even if queue.lanes already include lane, we don't know for certain if
+    // the lane finished since the last time we entangled it. So we need to
+    // entangle it again, just to be sure.
+    markRootEntangled(root, newQueueLanes);
+  }
+}
+
+function markUpdateInDevTools(fiber, lane, action) {
   if (__DEV__) {
     if (enableDebugTracing) {
       if (fiber.mode & DebugTracingMode) {
@@ -2321,15 +2358,23 @@ function dispatchAction<S, A>(
   }
 }
 
-function getCacheForType<T>(resourceType: () => T): T {
+function getCacheSignal(): AbortSignal {
   if (!enableCache) {
-    invariant(false, 'Not implemented.');
+    throw new Error('Not implemented.');
   }
   const cache: Cache = readContext(CacheContext);
-  let cacheForType: T | void = (cache.get(resourceType): any);
+  return cache.controller.signal;
+}
+
+function getCacheForType<T>(resourceType: () => T): T {
+  if (!enableCache) {
+    throw new Error('Not implemented.');
+  }
+  const cache: Cache = readContext(CacheContext);
+  let cacheForType: T | void = (cache.data.get(resourceType): any);
   if (cacheForType === undefined) {
     cacheForType = resourceType();
-    cache.set(resourceType, cacheForType);
+    cache.data.set(resourceType, cacheForType);
   }
   return cacheForType;
 }
@@ -2352,11 +2397,12 @@ export const ContextOnlyDispatcher: Dispatcher = {
   useTransition: throwInvalidHookError,
   useMutableSource: throwInvalidHookError,
   useSyncExternalStore: throwInvalidHookError,
-  useOpaqueIdentifier: throwInvalidHookError,
+  useId: throwInvalidHookError,
 
   unstable_isNewReconciler: enableNewReconciler,
 };
 if (enableCache) {
+  (ContextOnlyDispatcher: Dispatcher).getCacheSignal = getCacheSignal;
   (ContextOnlyDispatcher: Dispatcher).getCacheForType = getCacheForType;
   (ContextOnlyDispatcher: Dispatcher).useCacheRefresh = throwInvalidHookError;
 }
@@ -2379,11 +2425,12 @@ const HooksDispatcherOnMount: Dispatcher = {
   useTransition: mountTransition,
   useMutableSource: mountMutableSource,
   useSyncExternalStore: mountSyncExternalStore,
-  useOpaqueIdentifier: mountOpaqueIdentifier,
+  useId: mountId,
 
   unstable_isNewReconciler: enableNewReconciler,
 };
 if (enableCache) {
+  (HooksDispatcherOnMount: Dispatcher).getCacheSignal = getCacheSignal;
   (HooksDispatcherOnMount: Dispatcher).getCacheForType = getCacheForType;
   (HooksDispatcherOnMount: Dispatcher).useCacheRefresh = mountRefresh;
 }
@@ -2406,11 +2453,12 @@ const HooksDispatcherOnUpdate: Dispatcher = {
   useTransition: updateTransition,
   useMutableSource: updateMutableSource,
   useSyncExternalStore: updateSyncExternalStore,
-  useOpaqueIdentifier: updateOpaqueIdentifier,
+  useId: updateId,
 
   unstable_isNewReconciler: enableNewReconciler,
 };
 if (enableCache) {
+  (HooksDispatcherOnUpdate: Dispatcher).getCacheSignal = getCacheSignal;
   (HooksDispatcherOnUpdate: Dispatcher).getCacheForType = getCacheForType;
   (HooksDispatcherOnUpdate: Dispatcher).useCacheRefresh = updateRefresh;
 }
@@ -2433,11 +2481,12 @@ const HooksDispatcherOnRerender: Dispatcher = {
   useTransition: rerenderTransition,
   useMutableSource: updateMutableSource,
   useSyncExternalStore: mountSyncExternalStore,
-  useOpaqueIdentifier: rerenderOpaqueIdentifier,
+  useId: updateId,
 
   unstable_isNewReconciler: enableNewReconciler,
 };
 if (enableCache) {
+  (HooksDispatcherOnRerender: Dispatcher).getCacheSignal = getCacheSignal;
   (HooksDispatcherOnRerender: Dispatcher).getCacheForType = getCacheForType;
   (HooksDispatcherOnRerender: Dispatcher).useCacheRefresh = updateRefresh;
 }
@@ -2599,15 +2648,16 @@ if (__DEV__) {
       mountHookTypesDev();
       return mountSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
     },
-    useOpaqueIdentifier(): OpaqueIDType | void {
-      currentHookNameInDev = 'useOpaqueIdentifier';
+    useId(): string {
+      currentHookNameInDev = 'useId';
       mountHookTypesDev();
-      return mountOpaqueIdentifier();
+      return mountId();
     },
 
     unstable_isNewReconciler: enableNewReconciler,
   };
   if (enableCache) {
+    (HooksDispatcherOnMountInDEV: Dispatcher).getCacheSignal = getCacheSignal;
     (HooksDispatcherOnMountInDEV: Dispatcher).getCacheForType = getCacheForType;
     (HooksDispatcherOnMountInDEV: Dispatcher).useCacheRefresh = function useCacheRefresh() {
       currentHookNameInDev = 'useCacheRefresh';
@@ -2740,15 +2790,16 @@ if (__DEV__) {
       updateHookTypesDev();
       return mountSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
     },
-    useOpaqueIdentifier(): OpaqueIDType | void {
-      currentHookNameInDev = 'useOpaqueIdentifier';
+    useId(): string {
+      currentHookNameInDev = 'useId';
       updateHookTypesDev();
-      return mountOpaqueIdentifier();
+      return mountId();
     },
 
     unstable_isNewReconciler: enableNewReconciler,
   };
   if (enableCache) {
+    (HooksDispatcherOnMountWithHookTypesInDEV: Dispatcher).getCacheSignal = getCacheSignal;
     (HooksDispatcherOnMountWithHookTypesInDEV: Dispatcher).getCacheForType = getCacheForType;
     (HooksDispatcherOnMountWithHookTypesInDEV: Dispatcher).useCacheRefresh = function useCacheRefresh() {
       currentHookNameInDev = 'useCacheRefresh';
@@ -2881,15 +2932,16 @@ if (__DEV__) {
       updateHookTypesDev();
       return updateSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
     },
-    useOpaqueIdentifier(): OpaqueIDType | void {
-      currentHookNameInDev = 'useOpaqueIdentifier';
+    useId(): string {
+      currentHookNameInDev = 'useId';
       updateHookTypesDev();
-      return updateOpaqueIdentifier();
+      return updateId();
     },
 
     unstable_isNewReconciler: enableNewReconciler,
   };
   if (enableCache) {
+    (HooksDispatcherOnUpdateInDEV: Dispatcher).getCacheSignal = getCacheSignal;
     (HooksDispatcherOnUpdateInDEV: Dispatcher).getCacheForType = getCacheForType;
     (HooksDispatcherOnUpdateInDEV: Dispatcher).useCacheRefresh = function useCacheRefresh() {
       currentHookNameInDev = 'useCacheRefresh';
@@ -3023,15 +3075,16 @@ if (__DEV__) {
       updateHookTypesDev();
       return updateSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
     },
-    useOpaqueIdentifier(): OpaqueIDType | void {
-      currentHookNameInDev = 'useOpaqueIdentifier';
+    useId(): string {
+      currentHookNameInDev = 'useId';
       updateHookTypesDev();
-      return rerenderOpaqueIdentifier();
+      return updateId();
     },
 
     unstable_isNewReconciler: enableNewReconciler,
   };
   if (enableCache) {
+    (HooksDispatcherOnRerenderInDEV: Dispatcher).getCacheSignal = getCacheSignal;
     (HooksDispatcherOnRerenderInDEV: Dispatcher).getCacheForType = getCacheForType;
     (HooksDispatcherOnRerenderInDEV: Dispatcher).useCacheRefresh = function useCacheRefresh() {
       currentHookNameInDev = 'useCacheRefresh';
@@ -3180,16 +3233,17 @@ if (__DEV__) {
       mountHookTypesDev();
       return mountSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
     },
-    useOpaqueIdentifier(): OpaqueIDType | void {
-      currentHookNameInDev = 'useOpaqueIdentifier';
+    useId(): string {
+      currentHookNameInDev = 'useId';
       warnInvalidHookAccess();
       mountHookTypesDev();
-      return mountOpaqueIdentifier();
+      return mountId();
     },
 
     unstable_isNewReconciler: enableNewReconciler,
   };
   if (enableCache) {
+    (InvalidNestedHooksDispatcherOnMountInDEV: Dispatcher).getCacheSignal = getCacheSignal;
     (InvalidNestedHooksDispatcherOnMountInDEV: Dispatcher).getCacheForType = getCacheForType;
     (InvalidNestedHooksDispatcherOnMountInDEV: Dispatcher).useCacheRefresh = function useCacheRefresh() {
       currentHookNameInDev = 'useCacheRefresh';
@@ -3338,16 +3392,17 @@ if (__DEV__) {
       updateHookTypesDev();
       return updateSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
     },
-    useOpaqueIdentifier(): OpaqueIDType | void {
-      currentHookNameInDev = 'useOpaqueIdentifier';
+    useId(): string {
+      currentHookNameInDev = 'useId';
       warnInvalidHookAccess();
       updateHookTypesDev();
-      return updateOpaqueIdentifier();
+      return updateId();
     },
 
     unstable_isNewReconciler: enableNewReconciler,
   };
   if (enableCache) {
+    (InvalidNestedHooksDispatcherOnUpdateInDEV: Dispatcher).getCacheSignal = getCacheSignal;
     (InvalidNestedHooksDispatcherOnUpdateInDEV: Dispatcher).getCacheForType = getCacheForType;
     (InvalidNestedHooksDispatcherOnUpdateInDEV: Dispatcher).useCacheRefresh = function useCacheRefresh() {
       currentHookNameInDev = 'useCacheRefresh';
@@ -3497,16 +3552,17 @@ if (__DEV__) {
       updateHookTypesDev();
       return updateSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
     },
-    useOpaqueIdentifier(): OpaqueIDType | void {
-      currentHookNameInDev = 'useOpaqueIdentifier';
+    useId(): string {
+      currentHookNameInDev = 'useId';
       warnInvalidHookAccess();
       updateHookTypesDev();
-      return rerenderOpaqueIdentifier();
+      return updateId();
     },
 
     unstable_isNewReconciler: enableNewReconciler,
   };
   if (enableCache) {
+    (InvalidNestedHooksDispatcherOnRerenderInDEV: Dispatcher).getCacheSignal = getCacheSignal;
     (InvalidNestedHooksDispatcherOnRerenderInDEV: Dispatcher).getCacheForType = getCacheForType;
     (InvalidNestedHooksDispatcherOnRerenderInDEV: Dispatcher).useCacheRefresh = function useCacheRefresh() {
       currentHookNameInDev = 'useCacheRefresh';

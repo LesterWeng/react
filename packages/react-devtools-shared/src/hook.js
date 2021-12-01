@@ -180,10 +180,7 @@ export function installHook(target: any): DevToolsHook | null {
     const args = inputArgs.slice();
 
     // Symbols cannot be concatenated with Strings.
-    let formatted: string =
-      typeof maybeMessage === 'symbol'
-        ? maybeMessage.toString()
-        : '' + maybeMessage;
+    let formatted = String(maybeMessage);
 
     // If the first argument is a string, check for substitutions.
     if (typeof maybeMessage === 'string') {
@@ -216,17 +213,14 @@ export function installHook(target: any): DevToolsHook | null {
     // Arguments that remain after formatting.
     if (args.length) {
       for (let i = 0; i < args.length; i++) {
-        const arg = args[i];
-
-        // Symbols cannot be concatenated with Strings.
-        formatted += ' ' + (typeof arg === 'symbol' ? arg.toString() : arg);
+        formatted += ' ' + String(args[i]);
       }
     }
 
     // Update escaped %% values.
     formatted = formatted.replace(/%{2,2}/g, '%');
 
-    return '' + formatted;
+    return String(formatted);
   }
 
   let unpatchFn = null;
@@ -496,6 +490,40 @@ export function installHook(target: any): DevToolsHook | null {
     }
   }
 
+  type StackFrameString = string;
+
+  const openModuleRangesStack: Array<StackFrameString> = [];
+  const moduleRanges: Array<[StackFrameString, StackFrameString]> = [];
+
+  function getTopStackFrameString(error: Error): StackFrameString | null {
+    const frames = error.stack.split('\n');
+    const frame = frames.length > 1 ? frames[1] : null;
+    return frame;
+  }
+
+  function getInternalModuleRanges(): Array<
+    [StackFrameString, StackFrameString],
+  > {
+    return moduleRanges;
+  }
+
+  function registerInternalModuleStart(error: Error) {
+    const startStackFrame = getTopStackFrameString(error);
+    if (startStackFrame !== null) {
+      openModuleRangesStack.push(startStackFrame);
+    }
+  }
+
+  function registerInternalModuleStop(error: Error) {
+    if (openModuleRangesStack.length > 0) {
+      const startStackFrame = openModuleRangesStack.pop();
+      const stopStackFrame = getTopStackFrameString(error);
+      if (stopStackFrame !== null) {
+        moduleRanges.push([startStackFrame, stopStackFrame]);
+      }
+    }
+  }
+
   // TODO: More meaningful names for "rendererInterfaces" and "renderers".
   const fiberRoots = {};
   const rendererInterfaces = new Map();
@@ -526,6 +554,13 @@ export function installHook(target: any): DevToolsHook | null {
     onCommitFiberRoot,
     onPostCommitFiberRoot,
     setStrictMode,
+
+    // Schedule Profiler runtime helpers.
+    // These internal React modules to report their own boundaries
+    // which in turn enables the profiler to dim or filter internal frames.
+    getInternalModuleRanges,
+    registerInternalModuleStart,
+    registerInternalModuleStop,
   };
 
   if (__TEST__) {
