@@ -245,7 +245,7 @@ const {
   ReactCurrentActQueue,
 } = ReactSharedInternals;
 
-// STRUCT:(ExecutionContext)
+// API-struct:ExecutionContext
 type ExecutionContext = number;
 
 export const NoContext = /*             */ 0b0000;

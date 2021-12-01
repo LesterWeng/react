@@ -30,7 +30,7 @@ import {clz32} from './clz32';
 
 export const TotalLanes = 31;
 
-// STRUCT:(lane)
+// API-struct:lane
 export const NoLanes: Lanes = /*                        */ 0b0000000000000000000000000000000;
 export const NoLane: Lane = /*                          */ 0b0000000000000000000000000000000;
 

@@ -649,7 +649,7 @@ export function readContext<T>(context: ReactContext<T>): T {
 
       // This is the first dependency for this component. Create a new list.
       lastContextDependency = contextItem;
-      // STRUCT:(dependencies，当前fiber的context依赖)
+      // API-struct:dependencies，当前fiber的context依赖
       currentlyRenderingFiber.dependencies = {
         lanes: NoLanes,
         firstContext: contextItem,

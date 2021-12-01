@@ -628,7 +628,7 @@ export function resetHooksAfterThrow(): void {
 
 // API-feature:mountWorkInProgressHook
 function mountWorkInProgressHook(): Hook {
-  // STRUCT:(hook，位于fiberNode.memoizedState，单链表)
+  // API-struct:hook，位于fiberNode.memoizedState，单链表
   const hook: Hook = {
     memoizedState: null,
 
@@ -714,7 +714,7 @@ function updateWorkInProgressHook(): Hook {
   return workInProgressHook;
 }
 
-// STRUCT:(functionComponent updateQueue，存放useEffect数据)
+// API-struct:functionComponent updateQueue，存放useEffect数据
 function createFunctionComponentUpdateQueue(): FunctionComponentUpdateQueue {
   return {
     lastEffect: null,
@@ -1544,7 +1544,7 @@ function rerenderState<S>(
 
 // API-feature:pushEffect
 function pushEffect(tag, create, destroy, deps) {
-  // STRUCT:(effect，updateQueue.lastEffect环形链表，和hook.queue.pending环形链表相同)
+  // API-struct:effect，updateQueue.lastEffect环形链表，和hook.queue.pending环形链表相同
   const effect: Effect = {
     tag,
     create,
@@ -2154,7 +2154,7 @@ function dispatchReducerAction<S, A>(
 
   const lane = requestUpdateLane(fiber);
 
-  // STRUCT:(update，位于hook.queue.pending，环形链表)
+  // API-struct:update，位于hook.queue.pending，环形链表
   const update: Update<S, A> = {
     lane,
     action,

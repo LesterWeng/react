@@ -161,7 +161,7 @@ if (__DEV__) {
 }
 
 export function initializeUpdateQueue<State>(fiber: Fiber): void {
-  // STRUCT:(ClassComponent、HostRoot updateQueue)
+  // API-struct:ClassComponent、HostRoot updateQueue
   const queue: UpdateQueue<State> = {
     baseState: fiber.memoizedState,
     firstBaseUpdate: null,

@@ -30,7 +30,7 @@ import {initializeUpdateQueue} from './ReactUpdateQueue.old';
 import {LegacyRoot, ConcurrentRoot} from './ReactRootTags';
 import {createCache, retainCache} from './ReactFiberCacheComponent.old';
 
-// STRUCT:(FiberRootNode)
+// API-struct:FiberRootNode
 function FiberRootNode(containerInfo, tag, hydrate) {
   this.tag = tag;
   this.containerInfo = containerInfo;

@@ -16,7 +16,7 @@ import {
 } from './ReactEventPriorities.old';
 import {ImmediatePriority, scheduleCallback} from './Scheduler';
 
-// STRUCT:(Scheduler:同步模式下使用的一般队列)
+// API-struct:Scheduler:同步模式下使用的一般队列
 let syncQueue: Array<SchedulerCallback> | null = null;
 let includesLegacySyncCallbacks: boolean = false;
 let isFlushingSyncQueue: boolean = false;

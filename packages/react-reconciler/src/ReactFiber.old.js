@@ -111,7 +111,7 @@ if (__DEV__) {
   }
 }
 
-// STRUCT:(FiberNode)
+// API-struct:FiberNode
 function FiberNode(
   tag: WorkTag,
   pendingProps: mixed,

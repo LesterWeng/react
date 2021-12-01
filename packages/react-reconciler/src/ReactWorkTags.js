@@ -34,7 +34,7 @@ export type WorkTag =
   | 23
   | 24;
 
-// STRUCT:(ReactWorkTags)
+// API-struct:ReactWorkTags
 export const FunctionComponent = 0;
 export const ClassComponent = 1;
 export const IndeterminateComponent = 2; // Before we know whether it is function or class

@@ -68,7 +68,7 @@ var LOW_PRIORITY_TIMEOUT = 10000;
 // Never times out
 var IDLE_PRIORITY_TIMEOUT = maxSigned31BitInt;
 
-// STRUCT:(Scheduler:并发模式下使用的优先队列-最小堆和延时队列)
+// API-struct:Scheduler:并发模式下使用的优先队列-最小堆和延时队列
 // RECORD:timerQueue相关的API：Suspense、SuspenseList、useTransition、useDeferredValue
 // Tasks are stored on a min heap
 var taskQueue = [];
