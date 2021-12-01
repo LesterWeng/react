@@ -5,8 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import invariant from 'shared/invariant';
-
 import ReactNoopUpdateQueue from './ReactNoopUpdateQueue';
 
 const emptyObject = {};
@@ -56,13 +54,17 @@ Component.prototype.isReactComponent = {};
  */
 // API-this.setState
 Component.prototype.setState = function(partialState, callback) {
-  invariant(
-    typeof partialState === 'object' ||
-      typeof partialState === 'function' ||
-      partialState == null,
-    'setState(...): takes an object of state variables to update or a ' +
-      'function which returns an object of state variables.',
-  );
+  if (
+    typeof partialState !== 'object' &&
+    typeof partialState !== 'function' &&
+    partialState != null
+  ) {
+    throw new Error(
+      'setState(...): takes an object of state variables to update or a ' +
+        'function which returns an object of state variables.',
+    );
+  }
+
   this.updater.enqueueSetState(this, partialState, callback, 'setState');
 };
 

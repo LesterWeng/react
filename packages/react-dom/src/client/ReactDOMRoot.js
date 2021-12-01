@@ -11,10 +11,12 @@ import type {Container} from './ReactDOMHostConfig';
 import type {MutableSource, ReactNodeList} from 'shared/ReactTypes';
 import type {FiberRoot} from 'react-reconciler/src/ReactInternalTypes';
 
+import {queueExplicitHydrationTarget} from '../events/ReactDOMEventReplaying';
+
 export type RootType = {
   render(children: ReactNodeList): void,
   unmount(): void,
-  _internalRoot: FiberRoot,
+  _internalRoot: FiberRoot | null,
   ...
 };
 
@@ -62,17 +64,24 @@ import {
   updateContainer,
   findHostInstanceWithNoPortals,
   registerMutableSourceForHydration,
+  flushSync,
+  isAlreadyRendering,
 } from 'react-reconciler/src/ReactFiberReconciler';
-import invariant from 'shared/invariant';
 import {ConcurrentRoot} from 'react-reconciler/src/ReactRootTags';
 import {allowConcurrentByDefault} from 'shared/ReactFeatureFlags';
 
-function ReactDOMRoot(internalRoot) {
+function ReactDOMRoot(internalRoot: FiberRoot) {
   this._internalRoot = internalRoot;
 }
 
-ReactDOMRoot.prototype.render = function(children: ReactNodeList): void {
+ReactDOMHydrationRoot.prototype.render = ReactDOMRoot.prototype.render = function(
+  children: ReactNodeList,
+): void {
   const root = this._internalRoot;
+  if (root === null) {
+    throw new Error('Cannot update an unmounted root.');
+  }
+
   if (__DEV__) {
     if (typeof arguments[1] === 'function') {
       console.error(
@@ -99,7 +108,7 @@ ReactDOMRoot.prototype.render = function(children: ReactNodeList): void {
   updateContainer(children, root, null, null);
 };
 
-ReactDOMRoot.prototype.unmount = function(): void {
+ReactDOMHydrationRoot.prototype.unmount = ReactDOMRoot.prototype.unmount = function(): void {
   if (__DEV__) {
     if (typeof arguments[0] === 'function') {
       console.error(
@@ -109,10 +118,23 @@ ReactDOMRoot.prototype.unmount = function(): void {
     }
   }
   const root = this._internalRoot;
-  const container = root.containerInfo;
-  updateContainer(null, root, null, () => {
+  if (root !== null) {
+    this._internalRoot = null;
+    const container = root.containerInfo;
+    if (__DEV__) {
+      if (isAlreadyRendering()) {
+        console.error(
+          'Attempted to synchronously unmount a root while React was already ' +
+            'rendering. React cannot finish unmounting the root until the ' +
+            'current render has completed, which may lead to a race condition.',
+        );
+      }
+    }
+    flushSync(() => {
+      updateContainer(null, root, null, null);
+    });
     unmarkContainerAsRoot(container);
-  });
+  }
 };
 
 // API-ReactDOM.createRoot
@@ -120,10 +142,10 @@ export function createRoot(
   container: Container,
   options?: CreateRootOptions,
 ): RootType {
-  invariant(
-    isValidContainerLegacy(container),
-    'createRoot(...): Target container is not a DOM element.',
-  );
+  if (!isValidContainerLegacy(container)) {
+    throw new Error('createRoot(...): Target container is not a DOM element.');
+  }
+
   warnIfReactDOMContainerInDEV(container);
 
   // TODO: Delete these options
@@ -172,15 +194,25 @@ export function createRoot(
   return new ReactDOMRoot(root);
 }
 
+function ReactDOMHydrationRoot(internalRoot: FiberRoot) {
+  this._internalRoot = internalRoot;
+}
+function scheduleHydration(target: Node) {
+  if (target) {
+    queueExplicitHydrationTarget(target);
+  }
+}
+ReactDOMHydrationRoot.prototype.unstable_scheduleHydration = scheduleHydration;
+
 export function hydrateRoot(
   container: Container,
   initialChildren: ReactNodeList,
   options?: HydrateRootOptions,
 ): RootType {
-  invariant(
-    isValidContainer(container),
-    'hydrateRoot(...): Target container is not a DOM element.',
-  );
+  if (!isValidContainer(container)) {
+    throw new Error('hydrateRoot(...): Target container is not a DOM element.');
+  }
+
   warnIfReactDOMContainerInDEV(container);
 
   // For now we reuse the whole bag of options since they contain
@@ -219,7 +251,7 @@ export function hydrateRoot(
   // Render the initial children
   updateContainer(initialChildren, root, null, null);
 
-  return new ReactDOMRoot(root);
+  return new ReactDOMHydrationRoot(root);
 }
 
 export function isValidContainer(node: any): boolean {
