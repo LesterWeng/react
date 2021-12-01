@@ -49,7 +49,6 @@ export function flushSyncCallbacksOnlyInLegacyMode() {
   }
 }
 
-// PHASE:(flushSyncCallbacks，同步执行完所有syncQueue内的调度任务)
 export function flushSyncCallbacks() {
   if (!isFlushingSyncQueue && syncQueue !== null) {
     // Prevent re-entrance.

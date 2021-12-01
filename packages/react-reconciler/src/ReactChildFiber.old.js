@@ -320,7 +320,7 @@ function ChildReconciler(shouldTrackSideEffects) {
     return existingChildren;
   }
 
-  // CHILDPHASE:(useFiber，除了cloneChildFibers外的另一种复用，sibling默认清除)
+  // API-render:useFiber，除了cloneChildFibers外的另一种复用，sibling默认清除
   function useFiber(fiber: Fiber, pendingProps: mixed): Fiber {
     // We currently set sibling to null and index to 0 here because it is easy
     // to forget to do before returning it. E.g. for the single child case.
@@ -562,7 +562,6 @@ function ChildReconciler(shouldTrackSideEffects) {
     return null;
   }
 
-  // PHASE:(updateSlot)
   function updateSlot(
     returnFiber: Fiber,
     oldFiber: Fiber | null,
@@ -749,7 +748,7 @@ function ChildReconciler(shouldTrackSideEffects) {
     return knownKeys;
   }
 
-  // CHILDPHASE:(reconcileChildrenArray)
+  // API-render:reconcileChildrenArray
   function reconcileChildrenArray(
     returnFiber: Fiber,
     currentFirstChild: Fiber | null,
@@ -1145,7 +1144,7 @@ function ChildReconciler(shouldTrackSideEffects) {
     return created;
   }
 
-  // CHILDPHASE:(reconcileSingleElement)
+  // API-render:reconcileSingleElement
   function reconcileSingleElement(
     returnFiber: Fiber,
     currentFirstChild: Fiber | null,

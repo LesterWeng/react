@@ -137,7 +137,7 @@ ReactDOMHydrationRoot.prototype.unmount = ReactDOMRoot.prototype.unmount = funct
   }
 };
 
-// API-ReactDOM.createRoot
+// API-feature:ReactDOM.createRoot
 export function createRoot(
   container: Container,
   options?: CreateRootOptions,

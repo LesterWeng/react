@@ -146,7 +146,7 @@ function handleTimeout(currentTime) {
   }
 }
 
-// PHASE:(Scheduler:flushWork)
+// API-scheduler:flushWork
 function flushWork(hasTimeRemaining, initialTime) {
   if (enableProfiling) {
     markSchedulerUnsuspended(initialTime);
@@ -190,7 +190,7 @@ function flushWork(hasTimeRemaining, initialTime) {
   }
 }
 
-// PHASE:(Scheduler:workLoop)
+// API-scheduler:workLoop
 function workLoop(hasTimeRemaining, initialTime) {
   let currentTime = initialTime;
   advanceTimers(currentTime);
@@ -310,7 +310,7 @@ function unstable_wrapCallback(callback) {
   };
 }
 
-// PHASE:(Scheduler:unstable_scheduleCallback)
+// API-scheduler:unstable_scheduleCallback
 function unstable_scheduleCallback(priorityLevel, callback, options) {
   var currentTime = getCurrentTime();
 
@@ -443,7 +443,7 @@ let startTime = -1;
 
 let needsPaint = false;
 
-// PHASE:(Scheduler:shouldYieldToHost)
+// API-scheduler:shouldYieldToHost
 function shouldYieldToHost() {
   const timeElapsed = getCurrentTime() - startTime;
   if (timeElapsed < frameInterval) {
@@ -519,7 +519,7 @@ function forceFrameRate(fps) {
   }
 }
 
-// PHASE:(SchedulerperformWorkUntilDeadline)
+// API-scheduler:performWorkUntilDeadline
 const performWorkUntilDeadline = () => {
   if (scheduledHostCallback !== null) {
     const currentTime = getCurrentTime();
@@ -587,7 +587,7 @@ if (typeof localSetImmediate === 'function') {
   };
 }
 
-// PHASE:(Scheduler:requestHostCallback)
+// API-scheduler:Scheduler:requestHostCallback
 function requestHostCallback(callback) {
   scheduledHostCallback = callback;
   if (!isMessageLoopRunning) {

@@ -95,7 +95,6 @@ function FiberRootNode(containerInfo, tag, hydrate) {
   }
 }
 
-// CHILDPHASE:(createFiberRoot，创建FiberRootNode，创建RootFiber)
 export function createFiberRoot(
   containerInfo: any,
   tag: RootTag,

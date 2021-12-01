@@ -273,7 +273,7 @@ if (__DEV__) {
   didWarnAboutDefaultPropsOnFunctionComponent = {};
 }
 
-// PHASE:(render子阶段，reconcileChildren，作用：生成workInProgress的child)
+// API-render:reconcileChildren，作用：生成workInProgress的child
 export function reconcileChildren(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -1053,7 +1053,6 @@ function updateFunctionComponent(
   return workInProgress.child;
 }
 
-// CHILDPHASE:(updateClassComponent)
 function updateClassComponent(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -1292,7 +1291,6 @@ function pushHostRootContext(workInProgress) {
   pushHostContainer(workInProgress, root.containerInfo);
 }
 
-// CHILDPHASE:(render子阶段，updateHostRoot)
 function updateHostRoot(current, workInProgress, renderLanes) {
   pushHostRootContext(workInProgress);
   const updateQueue = workInProgress.updateQueue;
@@ -1379,7 +1377,6 @@ function updateHostRoot(current, workInProgress, renderLanes) {
   return workInProgress.child;
 }
 
-// CHILDPHASE:(updateHostComponent)
 function updateHostComponent(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -3162,7 +3159,6 @@ function updatePortalComponent(
 
 let hasWarnedAboutUsingNoValuePropOnContextProvider = false;
 
-// CHILDPHASE:(updateContextProvider)
 function updateContextProvider(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -3313,7 +3309,6 @@ export function markWorkInProgressReceivedUpdate() {
 export function checkIfWorkInProgressReceivedUpdate() {
   return didReceiveUpdate;
 }
-// CHILDPHASE:(bailoutOnAlreadyFinishedWork，复用子fiber)
 function bailoutOnAlreadyFinishedWork(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -3650,7 +3645,8 @@ function attemptEarlyBailoutIfNoScheduledUpdate(
   return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
 }
 
-// PHASE:(beginWork，作用：增/删/改/复用 子fiberNode，diff对fiberNode.flags标记)
+// API-render:beginWork
+// 作用：增/删/改/复用 子fiberNode，diff对fiberNode.flags标记)
 // 两种生成child wip的方式：
 // 1.bailoutOnAlreadyFinishedWork内cloneChildFibers，复用原current child fiber，并设置上effect相关属性
 // 2.reconcileChildren内diff，更新时使用useFiber复用原wip child fiber，并设置上新jsx对象的props

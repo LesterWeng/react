@@ -316,7 +316,7 @@ function throwInvalidHookError() {
   );
 }
 
-// Util-areHookInputsEqual:(hook deps对比)
+// API-util:areHookInputsEqual,hook相关对比使用
 function areHookInputsEqual(
   nextDeps: Array<mixed>,
   prevDeps: Array<mixed> | null,
@@ -363,7 +363,7 @@ function areHookInputsEqual(
   }
   return true;
 }
-// CHILDPHASE:(renderWithHooks)
+// API-render:renderWithHooks
 export function renderWithHooks<Props, SecondArg>(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -418,7 +418,6 @@ export function renderWithHooks<Props, SecondArg>(
       ReactCurrentDispatcher.current = HooksDispatcherOnMountInDEV;
     }
   } else {
-    // CHILDPHASE:(更换mount/update Hook)
     ReactCurrentDispatcher.current =
       current === null || current.memoizedState === null
         ? HooksDispatcherOnMount
@@ -427,7 +426,6 @@ export function renderWithHooks<Props, SecondArg>(
 
   let children = Component(props, secondArg);
 
-  // CHILDPHASE:(render阶段触发的更新，如写在useEffect内的setState等)
   // Check if there was a render phase update
   if (didScheduleRenderPhaseUpdateDuringThisPass) {
     // Keep rendering in a loop for as long as render phase updates continue to
@@ -628,7 +626,7 @@ export function resetHooksAfterThrow(): void {
   localIdCounter = 0;
 }
 
-// CHILDPHASE:(mountWorkInProgressHook)
+// API-feature:mountWorkInProgressHook
 function mountWorkInProgressHook(): Hook {
   // STRUCT:(hook，位于fiberNode.memoizedState，单链表)
   const hook: Hook = {
@@ -652,7 +650,7 @@ function mountWorkInProgressHook(): Hook {
   return workInProgressHook;
 }
 
-// CHILDPHASE:(updateWorkInProgressHook，沿着单向链表获取当前hook)
+// API-feature:updateWorkInProgressHook，沿着单向链表获取当前hook
 function updateWorkInProgressHook(): Hook {
   // This function is used both for updates and for re-renders triggered by a
   // render phase update. It assumes there is either a current hook we can
@@ -1544,7 +1542,7 @@ function rerenderState<S>(
   return rerenderReducer(basicStateReducer, (initialState: any));
 }
 
-// CHILDPHASE:(pushEffect)
+// API-feature:pushEffect
 function pushEffect(tag, create, destroy, deps) {
   // STRUCT:(effect，updateQueue.lastEffect环形链表，和hook.queue.pending环形链表相同)
   const effect: Effect = {
@@ -1592,7 +1590,7 @@ function getCallerStackFrame(): string {
     : stackFrames.slice(2, 3).join('\n');
 }
 
-// CHILDPHASE:(mountRef)
+// API-feature:mountRef
 function mountRef<T>(initialValue: T): {|current: T|} {
   const hook = mountWorkInProgressHook();
   if (enableUseRefAccessWarning) {
@@ -1669,7 +1667,7 @@ function updateRef<T>(initialValue: T): {|current: T|} {
   const hook = updateWorkInProgressHook();
   return hook.memoizedState;
 }
-// CHILDPHASE:(mountEffect)
+// API-feature:mountEffect
 function mountEffectImpl(fiberFlags, hookFlags, create, deps): void {
   const hook = mountWorkInProgressHook();
   const nextDeps = deps === undefined ? null : deps;
@@ -1681,7 +1679,7 @@ function mountEffectImpl(fiberFlags, hookFlags, create, deps): void {
     nextDeps,
   );
 }
-// CHILDPHASE:(updateEffect)
+// API-feature:updateEffect
 function updateEffectImpl(fiberFlags, hookFlags, create, deps): void {
   const hook = updateWorkInProgressHook();
   const nextDeps = deps === undefined ? null : deps;
@@ -1906,7 +1904,7 @@ function updateCallback<T>(callback: T, deps: Array<mixed> | void | null): T {
   return callback;
 }
 
-// CHILDPHASE:(mountMemo)
+// API-feature:mountMemo
 function mountMemo<T>(
   nextCreate: () => T,
   deps: Array<mixed> | void | null,
@@ -1981,7 +1979,7 @@ function rerenderDeferredValue<T>(value: T): T {
   return prevValue;
 }
 
-// CHILDPHASE:(startTransition)
+// API-feature:startTransition
 function startTransition(setPending, callback) {
   const previousPriority = getCurrentUpdatePriority();
   setCurrentUpdatePriority(

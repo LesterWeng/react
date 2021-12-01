@@ -241,7 +241,7 @@ export function resolveLazyComponentTag(Component: Function): WorkTag {
   }
   return IndeterminateComponent;
 }
-// CHILDPHASE:(createWorkInProgress，复用current fiber(参数里的current实际是当前的wip)，结合wip fiber的部分属性生成新wip fiber)
+// API-render:createWorkInProgress，复用current fiber(参数里的current实际是当前的wip)，结合wip fiber的部分属性生成新wip fiber
 // This is used to create an alternate fiber to do work on.
 export function createWorkInProgress(current: Fiber, pendingProps: any): Fiber {
   let workInProgress = current.alternate;

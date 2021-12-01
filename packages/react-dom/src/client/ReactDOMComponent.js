@@ -596,7 +596,6 @@ export function setInitialProperties(
 }
 
 // Calculate the diff between the two objects.
-// CHILDPHASE:(diffProperties)
 export function diffProperties(
   domElement: Element,
   tag: string,

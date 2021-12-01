@@ -372,7 +372,6 @@ export function getCurrentTime() {
   return now();
 }
 
-// CHILDPHASE:(requestUpdateLane)
 export function requestUpdateLane(fiber: Fiber): Lane {
   // Special cases
   const mode = fiber.mode;
@@ -454,7 +453,7 @@ function requestRetryLane(fiber: Fiber) {
   return claimNextRetryLane();
 }
 
-// PHASE:(scheduleUpdateOnFiber，dispatchAction时mark fiber lanes，开始react工作流程)
+// API-start:scheduleUpdateOnFiber
 export function scheduleUpdateOnFiber(
   fiber: Fiber,
   lane: Lane,
@@ -462,7 +461,6 @@ export function scheduleUpdateOnFiber(
 ): FiberRoot | null {
   checkForNestedUpdates();
 
-  // PHASE:(markUpdateLaneFromFiberToRoot，标记fiber的lanes和fiber->root的childLanes)
   const root = markUpdateLaneFromFiberToRoot(fiber, lane);
   if (root === null) {
     return null;
@@ -635,7 +633,7 @@ export function isInterleavedUpdate(fiber: Fiber, lane: Lane) {
 // of the existing task is the same as the priority of the next level that the
 // root has work on. This function is called on every update, and right before
 // exiting a task.
-// PHASE:(ensureRootIsScheduled，将更新任务添加到syncQueue并根据是否同步模式使用微任务或其他方式调度)
+// API-start:ensureRootIsScheduled
 function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
   const existingCallbackNode = root.callbackNode;
 
@@ -662,7 +660,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
   // We use the highest priority lane to represent the priority of the callback.
   const newCallbackPriority = getHighestPriorityLane(nextLanes);
 
-  // CHILDPHASE:(复用已存在的task，多个setState情形)
+  // API-feature:多个setState情形,复用已存在的task
   // Check if there's an existing task. We may be able to reuse it.
   const existingCallbackPriority = root.callbackPriority;
   if (
@@ -700,7 +698,6 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
 
   // Schedule a new callback.
   let newCallbackNode;
-  // PHASE:(push syncQueue，仅在ensureRootIsScheduled中会出现,同步调度时，若支持微任务则使用微任务，否则使用Scheduler模块Immediate优先级调度同步的flushSyncCallbacks)
   if (newCallbackPriority === SyncLane) {
     // Special case: Sync React callbacks are scheduled on a special
     // internal queue
@@ -721,7 +718,6 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
         // of `act`.
         ReactCurrentActQueue.current.push(flushSyncCallbacks);
       } else {
-        // RECORD:微任务内同步执行完任务队列中的任务
         scheduleMicrotask(flushSyncCallbacks);
       }
     } else {
@@ -760,7 +756,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
 
 // This is the entry point for every concurrent task, i.e. anything that
 // goes through Scheduler.
-// PHASE:(performConcurrentWorkOnRoot)
+// API-start:performConcurrentWorkOnRoot
 function performConcurrentWorkOnRoot(root, didTimeout) {
   if (enableProfilerTimer && enableProfilerNestedUpdatePhase) {
     resetNestedUpdateFlag();
@@ -1102,7 +1098,7 @@ function markRootSuspended(root, suspendedLanes) {
 
 // This is the entry point for synchronous tasks that don't go
 // through Scheduler
-// PHASE:(performSyncWorkOnRoot，render、commit阶段)
+// API-start:performSyncWorkOnRoot
 function performSyncWorkOnRoot(root) {
   if (enableProfilerTimer && enableProfilerNestedUpdatePhase) {
     syncNestedUpdateFlag();
@@ -1112,7 +1108,7 @@ function performSyncWorkOnRoot(root) {
     throw new Error('Should not already be working.');
   }
 
-  // API-useEffect:(render、commit工作循环开始前先执行完未处理完的useEffect的清理和回调)
+  // API-useEffect:(render、commit工作循环开始前先flush完useEffect的清理和回调)
   flushPassiveEffects();
 
   let lanes = getNextLanes(root, NoLanes);
@@ -1316,7 +1312,6 @@ export function popRenderLanes(fiber: Fiber) {
   popFromStack(subtreeRenderLanesCursor, fiber);
 }
 
-// PHASE:(prepareFreshStack，复用原root.current生成一个rootFiber，workInProgress指向该rootFiber)
 function prepareFreshStack(root: FiberRoot, lanes: Lanes) {
   root.finishedWork = null;
   root.finishedLanes = NoLanes;
@@ -1513,7 +1508,7 @@ export function renderHasNotSuspendedYet(): boolean {
   // so those are false.
   return workInProgressRootExitStatus === RootIncomplete;
 }
-// PHASE:(renderRootSync，生成wip rootFiber，开始工作)
+// API-render:renderRootSync，render阶段开始，生成wip rootFiber，开始工作
 function renderRootSync(root: FiberRoot, lanes: Lanes) {
   const prevExecutionContext = executionContext;
   executionContext |= RenderContext;
@@ -1592,7 +1587,7 @@ function renderRootSync(root: FiberRoot, lanes: Lanes) {
 
 // The work loop is an extremely hot path. Tell Closure not to inline it.
 /** @noinline */
-// PHASE:(workLoopSync)
+// API-start:workLoopSync
 function workLoopSync() {
   // Already timed out, so perform work without checking if we need to yield.
   while (workInProgress !== null) {
@@ -1687,7 +1682,7 @@ function workLoopConcurrent() {
   }
 }
 
-// PHASE:(performUnitOfWork，递与归)
+// API-render:performUnitOfWork
 function performUnitOfWork(unitOfWork: Fiber): void {
   // The current, flushed, state of this fiber is the alternate. Ideally
   // nothing should rely on this, but relying on it here means that we don't
@@ -1716,7 +1711,7 @@ function performUnitOfWork(unitOfWork: Fiber): void {
   ReactCurrentOwner.current = null;
 }
 
-// PHASE:(completeUnitOfWork)
+// API-render:completeUnitOfWork
 function completeUnitOfWork(unitOfWork: Fiber): void {
   // Attempt to complete the current unit of work, then move to the next
   // sibling. If there are no more siblings, return to the parent fiber.
@@ -1810,7 +1805,7 @@ function completeUnitOfWork(unitOfWork: Fiber): void {
     workInProgressRootExitStatus = RootCompleted;
   }
 }
-// PHASE:(commitRoot，commit阶段开始)
+// API-commit:commitRoot
 function commitRoot(root) {
   // TODO: This no longer makes any sense. We already wrap the mutation and
   // layout phases. Should be able to remove.
@@ -1828,8 +1823,8 @@ function commitRoot(root) {
   return null;
 }
 
-// PHASE:(commitRootImpl)
 function commitRootImpl(root, renderPriorityLevel) {
+  // API-commit:下次的commit会先同步执行完所有passiveEffect
   do {
     // `flushPassiveEffects` will call `flushSyncUpdateQueue` at the end, which
     // means `flushPassiveEffects` will sometimes result in additional
@@ -1837,7 +1832,7 @@ function commitRootImpl(root, renderPriorityLevel) {
     // no more pending effects.
     // TODO: Might be better if `flushPassiveEffects` did not automatically
     // flush synchronous work at the end, to avoid factoring hazards like this.
-    // API-useEffect:(commitRootImpl先flush完清理和回调)
+    // API-useEffect:(commitRootImpl先flush完useEffect的清理和回调)
     flushPassiveEffects();
   } while (rootWithPendingPassiveEffects !== null);
   flushRenderPhaseStrictModeWarningsInDEV();
@@ -1917,6 +1912,7 @@ function commitRootImpl(root, renderPriorityLevel) {
   // might get scheduled in the commit phase. (See #16714.)
   // TODO: Delete all other places that schedule the passive effect callback
   // They're redundant.
+  // API-commit:useEffect异步调度第一步，调度passiveEffect后执行
   if (
     (finishedWork.subtreeFlags & PassiveMask) !== NoFlags ||
     (finishedWork.flags & PassiveMask) !== NoFlags
@@ -2048,7 +2044,7 @@ function commitRootImpl(root, renderPriorityLevel) {
   }
 
   const rootDidHavePassiveEffects = rootDoesHavePassiveEffects;
-
+  // API-commit:useEffect异步调用第二步,enqueue passiveEffect
   if (rootDoesHavePassiveEffects) {
     // This commit has passive effects. Stash a reference to them. But don't
     // schedule a callback until after flushing layout work.
@@ -2175,6 +2171,7 @@ function releaseRootPooledCache(root: FiberRoot, remainingLanes: Lanes) {
   }
 }
 
+// API-commit:flushPassiveEffects,执行passiveEffect
 export function flushPassiveEffects(): boolean {
   // Returns whether passive effects were flushed.
   // TODO: Combine this check with the one in flushPassiveEFfectsImpl. We should
@@ -2226,7 +2223,6 @@ export function enqueuePendingPassiveProfilerEffect(fiber: Fiber): void {
   }
 }
 
-// API-useEffect:(flushPassiveEffectsImpl，仅当root存在passiveEffect时执行useEffect的unmount和mount回调)
 function flushPassiveEffectsImpl() {
   if (rootWithPendingPassiveEffects === null) {
     return false;
@@ -2286,7 +2282,7 @@ function flushPassiveEffectsImpl() {
 
   executionContext = prevExecutionContext;
 
-  // Feature-flushSyncQueue:(flushPassiveEffects后，flush执行中添加的更新任务)
+  // Feature-flushSyncQueue:(useEffect回调里触发的同步更新，立即执行)
   flushSyncCallbacks();
 
   // If additional passive effects were scheduled, increment a counter. If this
