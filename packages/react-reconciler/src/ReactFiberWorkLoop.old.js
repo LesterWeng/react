@@ -1108,7 +1108,6 @@ function performSyncWorkOnRoot(root) {
     throw new Error('Should not already be working.');
   }
 
-  // API-useEffect:(render、commit工作循环开始前先flush完useEffect的清理和回调)
   flushPassiveEffects();
 
   let lanes = getNextLanes(root, NoLanes);
@@ -1832,7 +1831,6 @@ function commitRootImpl(root, renderPriorityLevel) {
     // no more pending effects.
     // TODO: Might be better if `flushPassiveEffects` did not automatically
     // flush synchronous work at the end, to avoid factoring hazards like this.
-    // API-useEffect:(commitRootImpl先flush完useEffect的清理和回调)
     flushPassiveEffects();
   } while (rootWithPendingPassiveEffects !== null);
   flushRenderPhaseStrictModeWarningsInDEV();
@@ -2044,7 +2042,7 @@ function commitRootImpl(root, renderPriorityLevel) {
   }
 
   const rootDidHavePassiveEffects = rootDoesHavePassiveEffects;
-  // API-commit:useEffect异步调用第二步,enqueue passiveEffect
+  // API-commit:useEffect异步调用第二步,赋值rootWithPendingPassiveEffects
   if (rootDoesHavePassiveEffects) {
     // This commit has passive effects. Stash a reference to them. But don't
     // schedule a callback until after flushing layout work.
