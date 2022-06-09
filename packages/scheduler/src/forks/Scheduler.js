@@ -68,7 +68,7 @@ var LOW_PRIORITY_TIMEOUT = 10000;
 // Never times out
 var IDLE_PRIORITY_TIMEOUT = maxSigned31BitInt;
 
-// API-struct:Scheduler:并发模式下使用的优先队列-最小堆和延时队列
+// API-struct:并发模式下使用的优先队列-最小堆和延时队列
 // RECORD:timerQueue相关的API：Suspense、SuspenseList、useTransition、useDeferredValue
 // Tasks are stored on a min heap
 var taskQueue = [];
@@ -587,7 +587,7 @@ if (typeof localSetImmediate === 'function') {
   };
 }
 
-// API-scheduler:Scheduler:requestHostCallback
+// API-scheduler:requestHostCallback
 function requestHostCallback(callback) {
   scheduledHostCallback = callback;
   if (!isMessageLoopRunning) {

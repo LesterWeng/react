@@ -1910,7 +1910,7 @@ function commitRootImpl(root, renderPriorityLevel) {
   // might get scheduled in the commit phase. (See #16714.)
   // TODO: Delete all other places that schedule the passive effect callback
   // They're redundant.
-  // API-commit:useEffect异步调度第一步，调度passiveEffect后执行
+  // API-commit:useEffect异步调度第一步,调度passiveEffect后执行
   if (
     (finishedWork.subtreeFlags & PassiveMask) !== NoFlags ||
     (finishedWork.flags & PassiveMask) !== NoFlags

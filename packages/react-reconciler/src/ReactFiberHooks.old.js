@@ -714,7 +714,7 @@ function updateWorkInProgressHook(): Hook {
   return workInProgressHook;
 }
 
-// API-struct:functionComponent updateQueue，存放useEffect数据
+// API-struct:FC updateQueue，存放useEffect数据
 function createFunctionComponentUpdateQueue(): FunctionComponentUpdateQueue {
   return {
     lastEffect: null,
@@ -1544,7 +1544,7 @@ function rerenderState<S>(
 
 // API-feature:pushEffect
 function pushEffect(tag, create, destroy, deps) {
-  // API-struct:effect，updateQueue.lastEffect环形链表，和hook.queue.pending环形链表相同
+  // API-struct:effect，updateQueue.lastEffect环形链表，同update环形链表
   const effect: Effect = {
     tag,
     create,
@@ -2154,7 +2154,7 @@ function dispatchReducerAction<S, A>(
 
   const lane = requestUpdateLane(fiber);
 
-  // API-struct:update，位于hook.queue.pending，环形链表
+  // API-struct:update，hook.queue.pending环形链表
   const update: Update<S, A> = {
     lane,
     action,
