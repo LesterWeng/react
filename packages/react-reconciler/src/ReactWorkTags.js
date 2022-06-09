@@ -32,7 +32,8 @@ export type WorkTag =
   | 21
   | 22
   | 23
-  | 24;
+  | 24
+  | 25;
 
 // API-struct:ReactWorkTags
 export const FunctionComponent = 0;
@@ -59,3 +60,4 @@ export const ScopeComponent = 21;
 export const OffscreenComponent = 22;
 export const LegacyHiddenComponent = 23;
 export const CacheComponent = 24;
+export const TracingMarkerComponent = 25;

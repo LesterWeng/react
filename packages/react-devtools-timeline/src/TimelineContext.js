@@ -8,16 +8,30 @@
  */
 
 import * as React from 'react';
-import {createContext, useCallback, useMemo, useState} from 'react';
-import createDataResourceFromImportedFile from './createDataResourceFromImportedFile';
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
+import {StoreContext} from 'react-devtools-shared/src/devtools/views/context';
 
-import type {HorizontalScrollStateChangeCallback, ViewState} from './types';
-import type {DataResource} from './createDataResourceFromImportedFile';
+import type {
+  HorizontalScrollStateChangeCallback,
+  TimelineData,
+  SearchRegExpStateChangeCallback,
+  ViewState,
+} from './types';
+import type {RefObject} from 'shared/ReactTypes';
 
 export type Context = {|
-  clearTimelineData: () => void,
-  importTimelineData: (file: File) => void,
-  timelineData: DataResource | null,
+  file: File | null,
+  inMemoryTimelineData: Array<TimelineData> | null,
+  isTimelineSupported: boolean,
+  searchInputContainerRef: RefObject,
+  setFile: (file: File | null) => void,
   viewState: ViewState,
 |};
 
@@ -29,30 +43,56 @@ type Props = {|
 |};
 
 function TimelineContextController({children}: Props) {
-  const [timelineData, setTimelineData] = useState<DataResource | null>(null);
+  const searchInputContainerRef = useRef(null);
+  const [file, setFile] = useState<string | null>(null);
 
-  const clearTimelineData = useCallback(() => {
-    setTimelineData(null);
-  }, []);
+  const store = useContext(StoreContext);
 
-  const importTimelineData = useCallback((file: File) => {
-    setTimelineData(createDataResourceFromImportedFile(file));
-  }, []);
+  const isTimelineSupported = useSyncExternalStore<boolean>(
+    function subscribe(callback) {
+      store.addListener('rootSupportsTimelineProfiling', callback);
+      return function unsubscribe() {
+        store.removeListener('rootSupportsTimelineProfiling', callback);
+      };
+    },
+    function getState() {
+      return store.rootSupportsTimelineProfiling;
+    },
+  );
+
+  const inMemoryTimelineData = useSyncExternalStore<Array<TimelineData> | null>(
+    function subscribe(callback) {
+      store.profilerStore.addListener('isProcessingData', callback);
+      store.profilerStore.addListener('profilingData', callback);
+      return function unsubscribe() {
+        store.profilerStore.removeListener('isProcessingData', callback);
+        store.profilerStore.removeListener('profilingData', callback);
+      };
+    },
+    function getState() {
+      return store.profilerStore.profilingData?.timelineData || null;
+    },
+  );
 
   // Recreate view state any time new profiling data is imported.
   const viewState = useMemo<ViewState>(() => {
     const horizontalScrollStateChangeCallbacks: Set<HorizontalScrollStateChangeCallback> = new Set();
+    const searchRegExpStateChangeCallbacks: Set<SearchRegExpStateChangeCallback> = new Set();
 
     const horizontalScrollState = {
       offset: 0,
       length: 0,
     };
 
-    return {
+    const state: ViewState = {
       horizontalScrollState,
       onHorizontalScrollStateChange: callback => {
         horizontalScrollStateChangeCallbacks.add(callback);
       },
+      onSearchRegExpStateChange: callback => {
+        searchRegExpStateChangeCallbacks.add(callback);
+      },
+      searchRegExp: null,
       updateHorizontalScrollState: scrollState => {
         if (
           horizontalScrollState.offset === scrollState.offset &&
@@ -68,18 +108,29 @@ function TimelineContextController({children}: Props) {
           callback(scrollState);
         });
       },
+      updateSearchRegExpState: (searchRegExp: RegExp | null) => {
+        state.searchRegExp = searchRegExp;
+
+        searchRegExpStateChangeCallbacks.forEach(callback => {
+          callback(searchRegExp);
+        });
+      },
       viewToMutableViewStateMap: new Map(),
     };
-  }, [timelineData]);
+
+    return state;
+  }, [file]);
 
   const value = useMemo(
     () => ({
-      clearTimelineData,
-      importTimelineData,
-      timelineData,
+      file,
+      inMemoryTimelineData,
+      isTimelineSupported,
+      searchInputContainerRef,
+      setFile,
       viewState,
     }),
-    [clearTimelineData, importTimelineData, timelineData, viewState],
+    [file, inMemoryTimelineData, isTimelineSupported, setFile, viewState],
   );
 
   return (

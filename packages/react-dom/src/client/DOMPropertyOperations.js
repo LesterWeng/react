@@ -19,8 +19,10 @@ import sanitizeURL from '../shared/sanitizeURL';
 import {
   disableJavaScriptURLs,
   enableTrustedTypesIntegration,
+  enableCustomElementPropertySupport,
 } from 'shared/ReactFeatureFlags';
 import {checkAttributeStringCoercion} from 'shared/CheckStringCoercion';
+import {getFiberCurrentPropsFromNode} from './ReactDOMComponentTree';
 
 import type {PropertyInfo} from '../shared/DOMProperty';
 
@@ -113,6 +115,7 @@ export function getValueForAttribute(
   node: Element,
   name: string,
   expected: mixed,
+  isCustomComponentTag: boolean,
 ): mixed {
   if (__DEV__) {
     if (!isAttributeNameSafe(name)) {
@@ -122,6 +125,13 @@ export function getValueForAttribute(
       return expected === undefined ? undefined : null;
     }
     const value = node.getAttribute(name);
+
+    if (enableCustomElementPropertySupport) {
+      if (isCustomComponentTag && value === '') {
+        return true;
+      }
+    }
+
     if (__DEV__) {
       checkAttributeStringCoercion(expected, name);
     }
@@ -149,9 +159,57 @@ export function setValueForProperty(
   if (shouldIgnoreAttribute(name, propertyInfo, isCustomComponentTag)) {
     return;
   }
+
+  if (
+    enableCustomElementPropertySupport &&
+    isCustomComponentTag &&
+    name[0] === 'o' &&
+    name[1] === 'n'
+  ) {
+    let eventName = name.replace(/Capture$/, '');
+    const useCapture = name !== eventName;
+    eventName = eventName.slice(2);
+
+    const prevProps = getFiberCurrentPropsFromNode(node);
+    const prevValue = prevProps != null ? prevProps[name] : null;
+    if (typeof prevValue === 'function') {
+      node.removeEventListener(eventName, prevValue, useCapture);
+    }
+    if (typeof value === 'function') {
+      if (typeof prevValue !== 'function' && prevValue !== null) {
+        // If we previously assigned a non-function type into this node, then
+        // remove it when switching to event listener mode.
+        if (name in (node: any)) {
+          (node: any)[name] = null;
+        } else if (node.hasAttribute(name)) {
+          node.removeAttribute(name);
+        }
+      }
+
+      // $FlowFixMe value can't be casted to EventListener.
+      node.addEventListener(eventName, (value: EventListener), useCapture);
+      return;
+    }
+  }
+
+  if (
+    enableCustomElementPropertySupport &&
+    isCustomComponentTag &&
+    name in (node: any)
+  ) {
+    (node: any)[name] = value;
+    return;
+  }
+
   if (shouldRemoveAttribute(name, value, propertyInfo, isCustomComponentTag)) {
     value = null;
   }
+  if (enableCustomElementPropertySupport) {
+    if (isCustomComponentTag && value === true) {
+      value = '';
+    }
+  }
+
   // If the prop isn't in the special list, treat it as a simple attribute.
   if (isCustomComponentTag || propertyInfo === null) {
     if (isAttributeNameSafe(name)) {

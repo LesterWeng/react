@@ -8,6 +8,7 @@
  */
 
 import type {ReactModel} from 'react-server/src/ReactFlightServer';
+import type {ServerContextJSONValue} from 'shared/ReactTypes';
 import type {BundlerConfig} from './ReactFlightServerWebpackBundlerConfig';
 
 import {
@@ -18,6 +19,8 @@ import {
 
 type Options = {
   onError?: (error: mixed) => void,
+  context?: Array<[string, ServerContextJSONValue]>,
+  identifierPrefix?: string,
 };
 
 function renderToReadableStream(
@@ -29,22 +32,23 @@ function renderToReadableStream(
     model,
     webpackMap,
     options ? options.onError : undefined,
+    options ? options.context : undefined,
+    options ? options.identifierPrefix : undefined,
   );
-  const stream = new ReadableStream({
-    start(controller) {
-      startWork(request);
-    },
-    pull(controller) {
-      // Pull is called immediately even if the stream is not passed to anything.
-      // That's buffering too early. We want to start buffering once the stream
-      // is actually used by something so we can give it the best result possible
-      // at that point.
-      if (stream.locked) {
+  const stream = new ReadableStream(
+    {
+      type: 'bytes',
+      start(controller) {
+        startWork(request);
+      },
+      pull(controller) {
         startFlowing(request, controller);
-      }
+      },
+      cancel(reason) {},
     },
-    cancel(reason) {},
-  });
+    // $FlowFixMe size() methods are not allowed on byte streams.
+    {highWaterMark: 0},
+  );
   return stream;
 }
 

@@ -9,6 +9,11 @@
 
 import type {ReactNodeList} from 'shared/ReactTypes';
 import type {Container} from './ReactDOMHostConfig';
+import type {
+  RootType,
+  HydrateRootOptions,
+  CreateRootOptions,
+} from './ReactDOMRoot';
 
 import {
   findDOMNode,
@@ -17,7 +22,11 @@ import {
   unstable_renderSubtreeIntoContainer,
   unmountComponentAtNode,
 } from './ReactDOMLegacy';
-import {createRoot, hydrateRoot, isValidContainer} from './ReactDOMRoot';
+import {
+  createRoot as createRootImpl,
+  hydrateRoot as hydrateRootImpl,
+  isValidContainer,
+} from './ReactDOMRoot';
 import {createEventHandle} from './ReactDOMEventHandle';
 
 import {
@@ -39,10 +48,7 @@ import {
 import {createPortal as createPortalImpl} from 'react-reconciler/src/ReactPortal';
 import {canUseDOM} from 'shared/ExecutionEnvironment';
 import ReactVersion from 'shared/ReactVersion';
-import {
-  warnUnstableRenderSubtreeIntoContainer,
-  enableNewReconciler,
-} from 'shared/ReactFeatureFlags';
+import {enableNewReconciler} from 'shared/ReactFeatureFlags';
 
 import {
   getInstanceFromNode,
@@ -73,8 +79,6 @@ setAttemptHydrationAtCurrentPriority(attemptHydrationAtCurrentPriority);
 setGetCurrentUpdatePriority(getCurrentUpdatePriority);
 setAttemptHydrationAtPriority(runWithPriority);
 
-let didWarnAboutUnstableRenderSubtreeIntoContainer = false;
-
 if (__DEV__) {
   if (
     typeof Map !== 'function' ||
@@ -103,7 +107,7 @@ setBatchingImplementation(
 
 function createPortal(
   children: ReactNodeList,
-  container: Container,
+  container: Element | DocumentFragment,
   key: ?string = null,
 ): React$Portal {
   if (!isValidContainer(container)) {
@@ -121,19 +125,6 @@ function renderSubtreeIntoContainer(
   containerNode: Container,
   callback: ?Function,
 ) {
-  if (__DEV__) {
-    if (
-      warnUnstableRenderSubtreeIntoContainer &&
-      !didWarnAboutUnstableRenderSubtreeIntoContainer
-    ) {
-      didWarnAboutUnstableRenderSubtreeIntoContainer = true;
-      console.warn(
-        'ReactDOM.unstable_renderSubtreeIntoContainer() is deprecated ' +
-          'and will be removed in a future major release. Consider using ' +
-          'React Portals instead.',
-      );
-    }
-  }
   return unstable_renderSubtreeIntoContainer(
     parentComponent,
     element,
@@ -143,6 +134,7 @@ function renderSubtreeIntoContainer(
 }
 
 const Internals = {
+  usingClientEntryPoint: false,
   // Keep in sync with ReactTestUtils.js.
   // This is an array for better minification.
   Events: [
@@ -154,6 +146,37 @@ const Internals = {
     batchedUpdates,
   ],
 };
+
+function createRoot(
+  container: Element | Document | DocumentFragment,
+  options?: CreateRootOptions,
+): RootType {
+  if (__DEV__) {
+    if (!Internals.usingClientEntryPoint && !__UMD__) {
+      console.error(
+        'You are importing createRoot from "react-dom" which is not supported. ' +
+          'You should instead import it from "react-dom/client".',
+      );
+    }
+  }
+  return createRootImpl(container, options);
+}
+
+function hydrateRoot(
+  container: Document | Element,
+  initialChildren: ReactNodeList,
+  options?: HydrateRootOptions,
+): RootType {
+  if (__DEV__) {
+    if (!Internals.usingClientEntryPoint && !__UMD__) {
+      console.error(
+        'You are importing hydrateRoot from "react-dom" which is not supported. ' +
+          'You should instead import it from "react-dom/client".',
+      );
+    }
+  }
+  return hydrateRootImpl(container, initialChildren, options);
+}
 
 // Overload the definition to the two valid signatures.
 // Warning, this opts-out of checking the function body.

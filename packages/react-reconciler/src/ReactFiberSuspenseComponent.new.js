@@ -13,6 +13,7 @@ import type {SuspenseInstance} from './ReactFiberHostConfig';
 import type {Lane} from './ReactFiberLane.new';
 import type {TreeContext} from './ReactFiberTreeContext.new';
 
+import {enableSuspenseAvoidThisFallback} from 'shared/ReactFeatureFlags';
 import {SuspenseComponent, SuspenseListComponent} from './ReactWorkTags';
 import {NoFlags, DidCapture} from './ReactFiberFlags';
 import {
@@ -28,6 +29,7 @@ export type SuspenseProps = {|
   suspenseCallback?: (Set<Wakeable> | null) => mixed,
 
   unstable_expectedLoadTime?: number,
+  unstable_name?: string,
 |};
 
 // A null SuspenseState represents an unsuspended normal Suspense boundary.
@@ -81,7 +83,10 @@ export function shouldCaptureSuspense(
   }
   const props = workInProgress.memoizedProps;
   // Regular boundaries always capture.
-  if (props.unstable_avoidThisFallback !== true) {
+  if (
+    !enableSuspenseAvoidThisFallback ||
+    props.unstable_avoidThisFallback !== true
+  ) {
     return true;
   }
   // If it's a boundary we should avoid, then we prefer to bubble up to the

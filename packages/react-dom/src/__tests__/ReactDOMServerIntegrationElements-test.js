@@ -242,8 +242,8 @@ describe('ReactDOMServerIntegration', () => {
         );
         if (
           render === serverRender ||
-          render === clientRenderOnServerString ||
-          render === streamRender
+          render === streamRender ||
+          render === clientRenderOnServerString
         ) {
           // In the server render output there's comments between text nodes.
           expect(e.childNodes.length).toBe(5);
