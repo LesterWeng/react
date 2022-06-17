@@ -95,6 +95,7 @@ if (__DEV__) {
   };
 }
 
+// API-phase:处理stringRef为callbackRef
 function coerceRef(
   returnFiber: Fiber,
   current: Fiber | null,
