@@ -1230,6 +1230,7 @@ function hideOrUnhideAllChildren(finishedWork, isHidden) {
   }
 }
 
+// API-phase:attachRef
 function commitAttachRef(finishedWork: Fiber) {
   const ref = finishedWork.ref;
   if (ref !== null) {
