@@ -636,6 +636,7 @@ function cutOffTailIfNeeded(
       break;
     }
   }
+}
 function bubbleProperties(completedWork: Fiber) {
   const didBailout =
     completedWork.alternate !== null &&
