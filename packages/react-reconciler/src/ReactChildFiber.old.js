@@ -95,7 +95,7 @@ if (__DEV__) {
   };
 }
 
-// API-phase:处理stringRef为callbackRef
+// API-record:处理stringRef为callbackRef
 function coerceRef(
   returnFiber: Fiber,
   current: Fiber | null,
@@ -791,7 +791,7 @@ function ChildReconciler(shouldTrackSideEffects) {
     let lastPlacedIndex = 0;
     let newIdx = 0;
     let nextOldFiber = null;
-    // RECORD:第一轮遍历，仅处理key匹配的情况
+    // API-record:第一轮遍历，仅处理key匹配的情况
     for (; oldFiber !== null && newIdx < newChildren.length; newIdx++) {
       if (oldFiber.index > newIdx) {
         nextOldFiber = oldFiber;
@@ -822,7 +822,7 @@ function ChildReconciler(shouldTrackSideEffects) {
           deleteChild(returnFiber, oldFiber);
         }
       }
-      // RECORD:placeChild区分move和stay
+      // API-record:placeChild区分move和stay
       lastPlacedIndex = placeChild(newFiber, lastPlacedIndex, newIdx);
       if (previousNewFiber === null) {
         // TODO: Move out of the loop. This only happens for the first run.
@@ -1262,7 +1262,7 @@ function ChildReconciler(shouldTrackSideEffects) {
   // This API will tag the children with the side-effect of the reconciliation
   // itself. They will be added to the side-effect list as we pass through the
   // children and the parent.
-  //CHILDPHASE:(render子阶段，reconcileChildFibers)
+  // API-record:render子阶段，reconcileChildFibers
   function reconcileChildFibers(
     returnFiber: Fiber,
     currentFirstChild: Fiber | null,
@@ -1371,7 +1371,7 @@ function ChildReconciler(shouldTrackSideEffects) {
 
 export const reconcileChildFibers = ChildReconciler(true);
 export const mountChildFibers = ChildReconciler(false);
-//CHILDPHASE:(cloneChildFibers，复用)
+// API-record:cloneChildFibers，复用
 export function cloneChildFibers(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -1386,7 +1386,7 @@ export function cloneChildFibers(
 
   let currentChild = workInProgress.child;
   let newChild = createWorkInProgress(currentChild, currentChild.pendingProps);
-  // RECORD:(切换workInProgress.child的wip为新child fiber)
+  // API-record:切换workInProgress.child的wip为新child fiber
   workInProgress.child = newChild;
 
   newChild.return = workInProgress;

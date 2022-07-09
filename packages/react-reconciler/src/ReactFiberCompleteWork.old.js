@@ -897,7 +897,7 @@ function completeWork(
       popHostContext(workInProgress);
       const rootContainerInstance = getRootHostContainer();
       const type = workInProgress.type;
-      // RECORD:生成fiberNode.updateQueue
+      // API-record:生成fiberNode.updateQueue
       if (current !== null && workInProgress.stateNode != null) {
         updateHostComponent(
           current,
@@ -929,7 +929,7 @@ function completeWork(
         // "stack" as the parent. Then append children as we go in beginWork
         // or completeWork depending on whether we want to add them top->down or
         // bottom->up. Top->down is faster in IE11.
-        // RECORD:Hydrated是指和SSR有关的
+        // API-record:Hydrated是指和SSR有关的
         const wasHydrated = popHydrationState(workInProgress);
         if (wasHydrated) {
           // TODO: Move this and createInstance step into the beginPhase
@@ -946,7 +946,7 @@ function completeWork(
             markUpdate(workInProgress);
           }
         } else {
-          // RECORD:创建stateNode
+          // API-record:创建stateNode
           const instance = createInstance(
             type,
             newProps,

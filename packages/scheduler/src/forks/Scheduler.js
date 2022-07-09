@@ -69,7 +69,7 @@ var LOW_PRIORITY_TIMEOUT = 10000;
 var IDLE_PRIORITY_TIMEOUT = maxSigned31BitInt;
 
 // API-struct:并发模式下使用的优先队列-最小堆和延时队列
-// RECORD:timerQueue相关的API：Suspense、SuspenseList、useTransition、useDeferredValue
+// API-record:timerQueue相关的API：Suspense、SuspenseList、useTransition、useDeferredValue
 // Tasks are stored on a min heap
 var taskQueue = [];
 var timerQueue = [];
@@ -160,7 +160,7 @@ function flushWork(hasTimeRemaining, initialTime) {
     cancelHostTimeout();
   }
 
-  // RECORD:表示处于flushWork过程中
+  // API-record:表示处于flushWork过程中
   isPerformingWork = true;
   const previousPriorityLevel = currentPriorityLevel;
   try {
@@ -190,7 +190,7 @@ function flushWork(hasTimeRemaining, initialTime) {
   }
 }
 
-// API-scheduler:workLoop
+// API-scheduler:workLoop，在这里时间切片打断render
 function workLoop(hasTimeRemaining, initialTime) {
   let currentTime = initialTime;
   advanceTimers(currentTime);
@@ -555,6 +555,7 @@ const performWorkUntilDeadline = () => {
   needsPaint = false;
 };
 
+// API-scheduler:宏任务优雅降级
 let schedulePerformWorkUntilDeadline;
 if (typeof localSetImmediate === 'function') {
   // Node.js and old IE.

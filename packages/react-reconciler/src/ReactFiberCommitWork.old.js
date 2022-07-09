@@ -1119,7 +1119,7 @@ function hideOrUnhideAllChildren(finishedWork, isHidden) {
   }
 }
 
-// API-phase:attachRef
+// API-record:attachRef
 function commitAttachRef(finishedWork: Fiber) {
   const ref = finishedWork.ref;
   if (ref !== null) {
@@ -2137,7 +2137,7 @@ function commitResetTextContent(current: Fiber) {
   resetTextContent(current.stateNode);
 }
 
-// API-commit:commitMutationEffects
+// API-commit:commitMutationEffects，操作dom
 export function commitMutationEffects(
   root: FiberRoot,
   firstChild: Fiber,
@@ -2328,7 +2328,7 @@ function commitMutationEffectsOnFiber(finishedWork: Fiber, root: FiberRoot) {
   }
 }
 
-// API-commit:commitLayoutEffects
+// API-commit:commitLayoutEffects，执行useLayoutEffect回调、更新ref...
 export function commitLayoutEffects(
   finishedWork: Fiber,
   root: FiberRoot,

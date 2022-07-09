@@ -394,7 +394,7 @@ export function requestUpdateLane(fiber: Fiber): Lane {
     return pickArbitraryLane(workInProgressRootRenderLanes);
   }
 
-  // RECORD:(transition时返回transitionLanes)
+  // API-record:transition为1时(useDeferredValue、useTransition)返回transitionLane
   const isTransition = requestCurrentTransition() !== NoTransition;
   if (isTransition) {
     if (
@@ -705,7 +705,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
       if (__DEV__ && ReactCurrentActQueue.isBatchingLegacy !== null) {
         ReactCurrentActQueue.didScheduleLegacyUpdate = true;
       }
-      // RECORD:添加到同步任务队列syncQueue
+      // API-record:添加到同步任务队列syncQueue
       scheduleLegacySyncCallback(performSyncWorkOnRoot.bind(null, root));
     } else {
       scheduleSyncCallback(performSyncWorkOnRoot.bind(null, root));
@@ -1515,7 +1515,7 @@ function renderRootSync(root: FiberRoot, lanes: Lanes) {
 
   // If the root or lanes have changed, throw out the existing stack
   // and prepare a fresh one. Otherwise we'll continue where we left off.
-  // RECORD:workInProgressRoot代表在render进行中的root，mount和update都会重新生成rootFiber(即root.current)
+  // API-record:workInProgressRoot代表在render进行中的root，mount和update都会重新生成rootFiber(即root.current)
   if (workInProgressRoot !== root || workInProgressRootRenderLanes !== lanes) {
     if (enableUpdaterTracking) {
       if (isDevToolsPresent) {
@@ -1992,7 +1992,7 @@ function commitRootImpl(root, renderPriorityLevel) {
     // the mutation phase, so that the previous tree is still current during
     // componentWillUnmount, but before the layout phase, so that the finished
     // work is current during componentDidMount/Update.
-    // RECORD:(切换rootFiber)
+    // API-record:mutation后切换rootFiber
     root.current = finishedWork;
 
     // The next phase is the layout phase, where we call effects that read

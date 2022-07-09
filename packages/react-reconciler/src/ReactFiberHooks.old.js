@@ -633,7 +633,7 @@ function mountWorkInProgressHook(): Hook {
     memoizedState: null,
 
     baseState: null,
-    // RECORD:baseQueue为之前render阶段由于优先级过低而未处理的update
+    // API-record:baseQueue为之前render阶段由于优先级过低而未处理的update
     baseQueue: null,
     queue: null,
 
@@ -659,7 +659,7 @@ function updateWorkInProgressHook(): Hook {
   // the dispatcher used for mounts.
   let nextCurrentHook: null | Hook;
 
-  // RECORD:组件内首个hook的currentHook为null
+  // API-record:组件内首个hook的currentHook为null
   if (currentHook === null) {
     const current = currentlyRenderingFiber.alternate;
     if (current !== null) {
@@ -756,7 +756,7 @@ function mountReducer<S, I, A>(
   ): any));
   return [hook.memoizedState, dispatch];
 }
-//CHILDPHASE:(updateState, updateReducer，dispatchAction后renderRootSync再次执行updateReducer时才会根据baseQueue更新memoizedState)
+// API-feature:updateState, updateReducer，dispatchAction后renderRootSync再次执行updateReducer时才会根据baseQueue更新memoizedState
 function updateReducer<S, I, A>(
   reducer: (S, A) => S,
   initialArg: I,
@@ -878,7 +878,7 @@ function updateReducer<S, I, A>(
 
     // Mark that the fiber performed work, but only if the new state is
     // different from the current state.
-    // RECORD:执行Comp()时比较state，标记didReceiveUpdate
+    // API-record:执行Comp()时比较state，标记didReceiveUpdate
     if (!is(newState, hook.memoizedState)) {
       markWorkInProgressReceivedUpdate();
     }
@@ -1679,7 +1679,6 @@ function mountEffectImpl(fiberFlags, hookFlags, create, deps): void {
     nextDeps,
   );
 }
-// API-feature:updateEffect
 function updateEffectImpl(fiberFlags, hookFlags, create, deps): void {
   const hook = updateWorkInProgressHook();
   const nextDeps = deps === undefined ? null : deps;
@@ -1937,6 +1936,7 @@ function updateMemo<T>(
   return nextValue;
 }
 
+// API-feature:mountDeferredValue
 function mountDeferredValue<T>(value: T): T {
   const [prevValue, setValue] = mountState(value);
   mountEffect(() => {
@@ -1979,7 +1979,6 @@ function rerenderDeferredValue<T>(value: T): T {
   return prevValue;
 }
 
-// API-feature:startTransition
 function startTransition(setPending, callback) {
   const previousPriority = getCurrentUpdatePriority();
   setCurrentUpdatePriority(
@@ -2016,6 +2015,7 @@ function startTransition(setPending, callback) {
   }
 }
 
+// API-feature:mountTransition
 function mountTransition(): [boolean, (() => void) => void] {
   const [isPending, setPending] = mountState(false);
   // The `start` method never changes.

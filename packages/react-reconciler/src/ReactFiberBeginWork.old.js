@@ -954,7 +954,7 @@ function markRef(current: Fiber | null, workInProgress: Fiber) {
   }
 }
 
-// //CHILDPHASE:(render子阶段，updateFunctionComponent)
+// API-record:render子阶段，updateFunctionComponent
 function updateFunctionComponent(
   current,
   workInProgress,
@@ -1023,7 +1023,7 @@ function updateFunctionComponent(
     }
     setIsRendering(false);
   } else {
-    // RECORD:生成children，执行Component更新state，如果改变，则标记didReceiveUpdate=true
+    // API-record:生成children，执行Component更新state，如果改变，则标记didReceiveUpdate=true
     nextChildren = renderWithHooks(
       current,
       workInProgress,
@@ -3344,7 +3344,7 @@ function bailoutOnAlreadyFinishedWork(
     }
   }
 
-  // RECORD:(此时的current、wip的child均指向child wip，内部会复用child current来生成新fiber)
+  // API-record:此时的current、wip的child均指向child wip，内部会复用child current来生成新fiber
   // This fiber doesn't have work, but its subtree does. Clone the child
   // fibers and continue.
   cloneChildFibers(current, workInProgress);
@@ -3712,7 +3712,7 @@ function beginWork(
         // See https://github.com/facebook/react/pull/19216.
         didReceiveUpdate = true;
       } else {
-        // RECORD:发布订阅+高阶组件优化未使用到Context的子组件的render时，这里父组件的beginWork即会进入这里，
+        // API-record:发布订阅+高阶组件优化未使用到Context的子组件的render时，这里父组件的beginWork即会进入这里，
         // 因为lane包含updateLane但props未改变因而只有使用到Context的子组件才会render
 
         // An update was scheduled on this fiber, but there are no new props
@@ -3746,7 +3746,7 @@ function beginWork(
   // the update queue. However, there's an exception: SimpleMemoComponent
   // sometimes bails out later in the begin phase. This indicates that we should
   // move this assignment out of the common path and into each branch.
-  // RECORD:清除lanes，后面FC内的update hooks可能会更新lanes
+  // API-record:清除lanes，后面FC内的update hooks可能会更新lanes
   workInProgress.lanes = NoLanes;
 
   switch (workInProgress.tag) {
