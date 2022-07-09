@@ -13,6 +13,7 @@ const ReactDOMServerIntegrationUtils = require('./utils/ReactDOMServerIntegratio
 
 let React;
 let ReactDOM;
+let ReactDOMClient;
 let ReactDOMServer;
 let ReactTestUtils;
 let act;
@@ -24,6 +25,7 @@ function initModules() {
 
   React = require('react');
   ReactDOM = require('react-dom');
+  ReactDOMClient = require('react-dom/client');
   ReactDOMServer = require('react-dom/server');
   ReactTestUtils = require('react-dom/test-utils');
   act = require('jest-react').act;
@@ -163,8 +165,7 @@ describe('ReactDOMServerSuspense', () => {
     expect(divB.textContent).toBe('B');
 
     act(() => {
-      const root = ReactDOM.createRoot(parent, {hydrate: true});
-      root.render(example);
+      ReactDOMClient.hydrateRoot(parent, example);
     });
 
     const parent2 = element.parentNode;
@@ -188,7 +189,7 @@ describe('ReactDOMServerSuspense', () => {
           1,
         );
       },
-      'Add a <Suspense fallback=...> component higher in the tree',
+      'A component suspended while responding to synchronous input.',
     );
 
     itThrowsWhenRendering(
@@ -201,7 +202,7 @@ describe('ReactDOMServerSuspense', () => {
           1,
         );
       },
-      'Add a <Suspense fallback=...> component higher in the tree',
+      'A component suspended while responding to synchronous input.',
     );
   }
 

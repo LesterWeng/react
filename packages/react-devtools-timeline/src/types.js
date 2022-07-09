@@ -51,6 +51,7 @@ export type ReactScheduleRenderEvent = {|
 |};
 export type ReactScheduleStateUpdateEvent = {|
   ...BaseReactScheduleEvent,
+  +componentStack?: string,
   +type: 'schedule-state-update',
 |};
 export type ReactScheduleForceUpdateEvent = {|
@@ -68,7 +69,6 @@ export type SuspenseEvent = {|
   +phase: Phase | null,
   promiseName: string | null,
   resolution: 'rejected' | 'resolved' | 'unresolved',
-  resuspendTimestamps: Array<number> | null,
   +type: 'suspense',
 |};
 
@@ -170,6 +170,9 @@ export type Flamechart = FlamechartStackLayer[];
 export type HorizontalScrollStateChangeCallback = (
   scrollState: ScrollState,
 ) => void;
+export type SearchRegExpStateChangeCallback = (
+  searchRegExp: RegExp | null,
+) => void;
 
 // Imperative view state that corresponds to profiler data.
 // This state lives outside of React's lifecycle
@@ -179,7 +182,12 @@ export type ViewState = {|
   onHorizontalScrollStateChange: (
     callback: HorizontalScrollStateChangeCallback,
   ) => void,
+  onSearchRegExpStateChange: (
+    callback: SearchRegExpStateChangeCallback,
+  ) => void,
+  searchRegExp: RegExp | null,
   updateHorizontalScrollState: (scrollState: ScrollState) => void,
+  updateSearchRegExpState: (searchRegExp: RegExp | null) => void,
   viewToMutableViewStateMap: Map<string, mixed>,
 |};
 
@@ -188,13 +196,15 @@ export type InternalModuleSourceToRanges = Map<
   Array<[ErrorStackFrame, ErrorStackFrame]>,
 >;
 
-export type ReactProfilerData = {|
+export type LaneToLabelMap = Map<ReactLane, string>;
+
+export type TimelineData = {|
   batchUIDToMeasuresMap: Map<BatchUID, ReactMeasure[]>,
   componentMeasures: ReactComponentMeasure[],
   duration: number,
   flamechart: Flamechart,
   internalModuleSourceToRanges: InternalModuleSourceToRanges,
-  laneToLabelMap: Map<ReactLane, string>,
+  laneToLabelMap: LaneToLabelMap,
   laneToReactMeasureMap: Map<ReactLane, ReactMeasure[]>,
   nativeEvents: NativeEvent[],
   networkMeasures: NetworkMeasure[],
@@ -208,7 +218,29 @@ export type ReactProfilerData = {|
   thrownErrors: ThrownError[],
 |};
 
-export type ReactHoverContextInfo = {|
+export type TimelineDataExport = {|
+  batchUIDToMeasuresKeyValueArray: Array<[BatchUID, ReactMeasure[]]>,
+  componentMeasures: ReactComponentMeasure[],
+  duration: number,
+  flamechart: Flamechart,
+  internalModuleSourceToRanges: Array<
+    [string, Array<[ErrorStackFrame, ErrorStackFrame]>],
+  >,
+  laneToLabelKeyValueArray: Array<[ReactLane, string]>,
+  laneToReactMeasureKeyValueArray: Array<[ReactLane, ReactMeasure[]]>,
+  nativeEvents: NativeEvent[],
+  networkMeasures: NetworkMeasure[],
+  otherUserTimingMarks: UserTimingMark[],
+  reactVersion: string | null,
+  schedulingEvents: SchedulingEvent[],
+  snapshots: Snapshot[],
+  snapshotHeight: number,
+  startTime: number,
+  suspenseEvents: SuspenseEvent[],
+  thrownErrors: ThrownError[],
+|};
+
+export type ReactEventInfo = {|
   componentMeasure: ReactComponentMeasure | null,
   flamechartStackFrame: FlamechartStackFrame | null,
   measure: ReactMeasure | null,

@@ -14,6 +14,12 @@ export type LogEvent =
       +event_name: 'loaded-dev-tools',
     |}
   | {|
+      +event_name: 'error',
+      +error_message: string | null,
+      +error_stack: string | null,
+      +error_component_stack: string | null,
+    |}
+  | {|
       +event_name: 'selected-components-tab',
     |}
   | {|
@@ -27,7 +33,7 @@ export type LogEvent =
       +inspected_element_number_of_hooks: number | null,
     |};
 
-export type LogFunction = LogEvent => void;
+export type LogFunction = LogEvent => void | Promise<void>;
 
 let logFunctions: Array<LogFunction> = [];
 export const logEvent: LogFunction =

@@ -148,6 +148,10 @@ export function attach(
 
   let getInternalIDForNative: GetFiberIDForNative = ((null: any): GetFiberIDForNative);
   let findNativeNodeForInternalID: (id: number) => ?NativeType;
+  let getFiberForNative = (node: NativeType) => {
+    // Not implemented.
+    return null;
+  };
 
   if (renderer.ComponentTree) {
     getInternalIDForNative = (node, findNearestUnfilteredAncestor) => {
@@ -159,6 +163,9 @@ export function attach(
     findNativeNodeForInternalID = (id: number) => {
       const internalInstance = idToInternalInstanceMap.get(id);
       return renderer.ComponentTree.getNodeFromInstance(internalInstance);
+    };
+    getFiberForNative = (node: NativeType) => {
+      return renderer.ComponentTree.getClosestInstanceFromNode(node);
     };
   } else if (renderer.Mount.getID && renderer.Mount.getNode) {
     getInternalIDForNative = (node, findNearestUnfilteredAncestor) => {
@@ -386,7 +393,9 @@ export function attach(
       pushOperation(TREE_OPERATION_ADD);
       pushOperation(id);
       pushOperation(ElementTypeRoot);
-      pushOperation(0); // isProfilingSupported?
+      pushOperation(0); // StrictMode compliant?
+      pushOperation(0); // Profiling flag
+      pushOperation(0); // StrictMode supported?
       pushOperation(hasOwnerMetadata ? 1 : 0);
     } else {
       const type = getElementType(internalInstance);
@@ -838,6 +847,10 @@ export function attach(
       rootType: null,
       rendererPackageName: null,
       rendererVersion: null,
+
+      plugins: {
+        stylex: null,
+      },
     };
   }
 
@@ -1088,6 +1101,7 @@ export function attach(
     flushInitialOperations,
     getBestMatchForTrackedPath,
     getDisplayNameForFiberID,
+    getFiberForNative,
     getFiberIDForNative: getInternalIDForNative,
     getInstanceAndStyle,
     findNativeNodesForFiberID: (id: number) => {

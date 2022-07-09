@@ -7,6 +7,7 @@ module.exports = {
   },
   globals: {
     // ES 6
+    BigInt: 'readonly',
     Map: 'readonly',
     Set: 'readonly',
     Proxy: 'readonly',
@@ -30,6 +31,7 @@ module.exports = {
     ArrayBuffer: 'readonly',
 
     TaskController: 'readonly',
+    reportError: 'readonly',
 
     // Flight
     Uint8Array: 'readonly',

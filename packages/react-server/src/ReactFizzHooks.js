@@ -14,6 +14,7 @@ import type {
   MutableSourceGetSnapshotFn,
   MutableSourceSubscribeFn,
   ReactContext,
+  StartTransitionOptions,
 } from 'shared/ReactTypes';
 
 import type {ResponseState} from './ReactServerFormatConfig';
@@ -21,6 +22,8 @@ import type {Task} from './ReactFizzServer';
 
 import {readContext as readContextImpl} from './ReactFizzNewContext';
 import {getTreeId} from './ReactFizzTreeContext';
+
+import {makeId} from './ReactServerFormatConfig';
 
 import {enableCache} from 'shared/ReactFeatureFlags';
 import is from 'shared/objectIs';
@@ -503,7 +506,10 @@ function unsupportedStartTransition() {
   throw new Error('startTransition cannot be called during server rendering.');
 }
 
-function useTransition(): [boolean, (callback: () => void) => void] {
+function useTransition(): [
+  boolean,
+  (callback: () => void, options?: StartTransitionOptions) => void,
+] {
   resolveCurrentlyRenderingComponent();
   return [false, unsupportedStartTransition];
 }
@@ -512,18 +518,15 @@ function useId(): string {
   const task: Task = (currentlyRenderingTask: any);
   const treeId = getTreeId(task.treeContext);
 
-  // Use a captial R prefix for server-generated ids.
-  let id = 'R:' + treeId;
-
-  // Unless this is the first id at this level, append a number at the end
-  // that represents the position of this useId hook among all the useId
-  // hooks for this fiber.
-  const localId = localIdCounter++;
-  if (localId > 0) {
-    id += ':' + localId.toString(32);
+  const responseState = currentResponseState;
+  if (responseState === null) {
+    throw new Error(
+      'Invalid hook call. Hooks can only be called inside of the body of a function component.',
+    );
   }
 
-  return id;
+  const localId = localIdCounter++;
+  return makeId(responseState, treeId, localId);
 }
 
 function unsupportedRefresh() {

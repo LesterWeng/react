@@ -23,10 +23,7 @@ import {
 } from 'shared/ReactSymbols';
 import {ClassComponent, HostText, HostPortal, Fragment} from './ReactWorkTags';
 import isArray from 'shared/isArray';
-import {
-  warnAboutStringRefs,
-  enableLazyElements,
-} from 'shared/ReactFeatureFlags';
+import {warnAboutStringRefs} from 'shared/ReactFeatureFlags';
 import {checkPropStringCoercion} from 'shared/CheckStringCoercion';
 
 import {
@@ -416,8 +413,7 @@ function ChildReconciler(shouldTrackSideEffects) {
         // We need to do this after the Hot Reloading check above,
         // because hot reloading has different semantics than prod because
         // it doesn't resuspend. So we can't let the call below suspend.
-        (enableLazyElements &&
-          typeof elementType === 'object' &&
+        (typeof elementType === 'object' &&
           elementType !== null &&
           elementType.$$typeof === REACT_LAZY_TYPE &&
           resolveLazy(elementType) === current.type)
@@ -532,11 +528,9 @@ function ChildReconciler(shouldTrackSideEffects) {
           return created;
         }
         case REACT_LAZY_TYPE: {
-          if (enableLazyElements) {
-            const payload = newChild._payload;
-            const init = newChild._init;
-            return createChild(returnFiber, init(payload), lanes);
-          }
+          const payload = newChild._payload;
+          const init = newChild._init;
+          return createChild(returnFiber, init(payload), lanes);
         }
       }
 
@@ -603,11 +597,9 @@ function ChildReconciler(shouldTrackSideEffects) {
           }
         }
         case REACT_LAZY_TYPE: {
-          if (enableLazyElements) {
-            const payload = newChild._payload;
-            const init = newChild._init;
-            return updateSlot(returnFiber, oldFiber, init(payload), lanes);
-          }
+          const payload = newChild._payload;
+          const init = newChild._init;
+          return updateSlot(returnFiber, oldFiber, init(payload), lanes);
         }
       }
 
@@ -665,17 +657,15 @@ function ChildReconciler(shouldTrackSideEffects) {
           return updatePortal(returnFiber, matchedFiber, newChild, lanes);
         }
         case REACT_LAZY_TYPE:
-          if (enableLazyElements) {
-            const payload = newChild._payload;
-            const init = newChild._init;
-            return updateFromMap(
-              existingChildren,
-              returnFiber,
-              newIdx,
-              init(payload),
-              lanes,
-            );
-          }
+          const payload = newChild._payload;
+          const init = newChild._init;
+          return updateFromMap(
+            existingChildren,
+            returnFiber,
+            newIdx,
+            init(payload),
+            lanes,
+          );
       }
 
       if (isArray(newChild) || getIteratorFn(newChild)) {
@@ -734,14 +724,10 @@ function ChildReconciler(shouldTrackSideEffects) {
           );
           break;
         case REACT_LAZY_TYPE:
-          if (enableLazyElements) {
-            const payload = child._payload;
-            const init = (child._init: any);
-            warnOnInvalidKey(init(payload), knownKeys, returnFiber);
-            break;
-          }
-        // We intentionally fallthrough here if enableLazyElements is not on.
-        // eslint-disable-next-lined no-fallthrough
+          const payload = child._payload;
+          const init = (child._init: any);
+          warnOnInvalidKey(init(payload), knownKeys, returnFiber);
+          break;
         default:
           break;
       }
@@ -1181,8 +1167,7 @@ function ChildReconciler(shouldTrackSideEffects) {
             // We need to do this after the Hot Reloading check above,
             // because hot reloading has different semantics than prod because
             // it doesn't resuspend. So we can't let the call below suspend.
-            (enableLazyElements &&
-              typeof elementType === 'object' &&
+            (typeof elementType === 'object' &&
               elementType !== null &&
               elementType.$$typeof === REACT_LAZY_TYPE &&
               resolveLazy(elementType) === child.type)
@@ -1308,17 +1293,15 @@ function ChildReconciler(shouldTrackSideEffects) {
             ),
           );
         case REACT_LAZY_TYPE:
-          if (enableLazyElements) {
-            const payload = newChild._payload;
-            const init = newChild._init;
-            // TODO: This function is supposed to be non-recursive.
-            return reconcileChildFibers(
-              returnFiber,
-              currentFirstChild,
-              init(payload),
-              lanes,
-            );
-          }
+          const payload = newChild._payload;
+          const init = newChild._init;
+          // TODO: This function is supposed to be non-recursive.
+          return reconcileChildFibers(
+            returnFiber,
+            currentFirstChild,
+            init(payload),
+            lanes,
+          );
       }
 
       if (isArray(newChild)) {

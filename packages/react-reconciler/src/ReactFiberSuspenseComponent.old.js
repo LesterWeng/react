@@ -28,6 +28,7 @@ export type SuspenseProps = {|
   suspenseCallback?: (Set<Wakeable> | null) => mixed,
 
   unstable_expectedLoadTime?: number,
+  unstable_name?: string,
 |};
 
 // A null SuspenseState represents an unsuspended normal Suspense boundary.
@@ -64,34 +65,6 @@ export type SuspenseListRenderState = {|
   // Tail insertions setting.
   tailMode: SuspenseListTailMode,
 |};
-
-export function shouldCaptureSuspense(
-  workInProgress: Fiber,
-  hasInvisibleParent: boolean,
-): boolean {
-  // If it was the primary children that just suspended, capture and render the
-  // fallback. Otherwise, don't capture and bubble to the next boundary.
-  const nextState: SuspenseState | null = workInProgress.memoizedState;
-  if (nextState !== null) {
-    if (nextState.dehydrated !== null) {
-      // A dehydrated boundary always captures.
-      return true;
-    }
-    return false;
-  }
-  const props = workInProgress.memoizedProps;
-  // Regular boundaries always capture.
-  if (props.unstable_avoidThisFallback !== true) {
-    return true;
-  }
-  // If it's a boundary we should avoid, then we prefer to bubble up to the
-  // parent boundary if it is currently invisible.
-  if (hasInvisibleParent) {
-    return false;
-  }
-  // If the parent is not able to handle it, we must handle it.
-  return true;
-}
 
 export function findFirstSuspended(row: Fiber): null | Fiber {
   let node = row;

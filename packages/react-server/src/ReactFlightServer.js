@@ -7,7 +7,6 @@
  * @flow
  */
 
-import type {Dispatcher as DispatcherType} from 'react-reconciler/src/ReactInternalTypes';
 import type {
   Destination,
   Chunk,
@@ -16,23 +15,45 @@ import type {
   ModuleReference,
   ModuleKey,
 } from './ReactFlightServerConfig';
+import type {ContextSnapshot} from './ReactFlightNewContext';
+import type {
+  ReactProviderType,
+  ServerContextJSONValue,
+} from 'shared/ReactTypes';
 
 import {
   scheduleWork,
   beginWriting,
-  writeChunk,
+  writeChunkAndReturn,
   completeWriting,
   flushBuffered,
   close,
   closeWithError,
   processModelChunk,
   processModuleChunk,
+  processProviderChunk,
   processSymbolChunk,
   processErrorChunk,
+  processReferenceChunk,
   resolveModuleMetaData,
   getModuleKey,
   isModuleReference,
 } from './ReactFlightServerConfig';
+
+import {
+  Dispatcher,
+  getCurrentCache,
+  prepareToUseHooksForRequest,
+  resetHooksForRequest,
+  setCurrentCache,
+} from './ReactFlightHooks';
+import {
+  pushProvider,
+  popProvider,
+  switchContext,
+  getActiveContext,
+  rootContextSnapshot,
+} from './ReactFlightNewContext';
 
 import {
   REACT_ELEMENT_TYPE,
@@ -40,8 +61,10 @@ import {
   REACT_FRAGMENT_TYPE,
   REACT_LAZY_TYPE,
   REACT_MEMO_TYPE,
+  REACT_PROVIDER_TYPE,
 } from 'shared/ReactSymbols';
 
+import {getOrCreateServerContext} from 'shared/ReactServerContextRegistry';
 import ReactSharedInternals from 'shared/ReactSharedInternals';
 import isArray from 'shared/isArray';
 
@@ -64,10 +87,17 @@ export type ReactModel =
 
 type ReactModelObject = {+[key: string]: ReactModel};
 
-type Segment = {
+const PENDING = 0;
+const COMPLETED = 1;
+const ABORTED = 3;
+const ERRORED = 4;
+
+type Task = {
   id: number,
+  status: 0 | 1 | 3 | 4,
   model: ReactModel,
   ping: () => void,
+  context: ContextSnapshot,
 };
 
 export type Request = {
@@ -78,12 +108,16 @@ export type Request = {
   cache: Map<Function, mixed>,
   nextChunkId: number,
   pendingChunks: number,
-  pingedSegments: Array<Segment>,
+  abortableTasks: Set<Task>,
+  pingedTasks: Array<Task>,
   completedModuleChunks: Array<Chunk>,
   completedJSONChunks: Array<Chunk>,
   completedErrorChunks: Array<Chunk>,
   writtenSymbols: Map<Symbol, number>,
   writtenModules: Map<ModuleKey, number>,
+  writtenProviders: Map<string, number>,
+  identifierPrefix: string,
+  identifierCount: number,
   onError: (error: mixed) => void,
   toJSON: (key: string, value: ReactModel) => ReactJSONValue,
 };
@@ -103,8 +137,11 @@ export function createRequest(
   model: ReactModel,
   bundlerConfig: BundlerConfig,
   onError: void | ((error: mixed) => void),
+  context?: Array<[string, ServerContextJSONValue]>,
+  identifierPrefix?: string,
 ): Request {
-  const pingedSegments = [];
+  const abortSet: Set<Task> = new Set();
+  const pingedTasks = [];
   const request = {
     status: OPEN,
     fatalError: null,
@@ -113,22 +150,35 @@ export function createRequest(
     cache: new Map(),
     nextChunkId: 0,
     pendingChunks: 0,
-    pingedSegments: pingedSegments,
+    abortableTasks: abortSet,
+    pingedTasks: pingedTasks,
     completedModuleChunks: [],
     completedJSONChunks: [],
     completedErrorChunks: [],
     writtenSymbols: new Map(),
     writtenModules: new Map(),
+    writtenProviders: new Map(),
+    identifierPrefix: identifierPrefix || '',
+    identifierCount: 1,
     onError: onError === undefined ? defaultErrorHandler : onError,
     toJSON: function(key: string, value: ReactModel): ReactJSONValue {
       return resolveModelToJSON(request, this, key, value);
     },
   };
   request.pendingChunks++;
-  const rootSegment = createSegment(request, model);
-  pingedSegments.push(rootSegment);
+  const rootContext = createRootContext(context);
+  const rootTask = createTask(request, model, rootContext, abortSet);
+  pingedTasks.push(rootTask);
   return request;
 }
+
+function createRootContext(
+  reqContext?: Array<[string, ServerContextJSONValue]>,
+) {
+  return importServerContexts(reqContext);
+}
+
+const POP = {};
 
 function attemptResolveElement(
   type: any,
@@ -167,12 +217,42 @@ function attemptResolveElement(
       return [REACT_ELEMENT_TYPE, type, key, props];
     }
     switch (type.$$typeof) {
+      case REACT_LAZY_TYPE: {
+        const payload = type._payload;
+        const init = type._init;
+        const wrappedType = init(payload);
+        return attemptResolveElement(wrappedType, key, ref, props);
+      }
       case REACT_FORWARD_REF_TYPE: {
         const render = type.render;
         return render(props, undefined);
       }
       case REACT_MEMO_TYPE: {
         return attemptResolveElement(type.type, key, ref, props);
+      }
+      case REACT_PROVIDER_TYPE: {
+        pushProvider(type._context, props.value);
+        if (__DEV__) {
+          const extraKeys = Object.keys(props).filter(value => {
+            if (value === 'children' || value === 'value') {
+              return false;
+            }
+            return true;
+          });
+          if (extraKeys.length !== 0) {
+            console.error(
+              'ServerContext can only have a value prop and children. Found: %s',
+              JSON.stringify(extraKeys),
+            );
+          }
+        }
+        return [
+          REACT_ELEMENT_TYPE,
+          type,
+          key,
+          // Rely on __popProvider being serialized last to pop the provider.
+          {value: props.value, children: props.children, __pop: POP},
+        ];
       }
     }
   }
@@ -181,22 +261,30 @@ function attemptResolveElement(
   );
 }
 
-function pingSegment(request: Request, segment: Segment): void {
-  const pingedSegments = request.pingedSegments;
-  pingedSegments.push(segment);
-  if (pingedSegments.length === 1) {
+function pingTask(request: Request, task: Task): void {
+  const pingedTasks = request.pingedTasks;
+  pingedTasks.push(task);
+  if (pingedTasks.length === 1) {
     scheduleWork(() => performWork(request));
   }
 }
 
-function createSegment(request: Request, model: ReactModel): Segment {
+function createTask(
+  request: Request,
+  model: ReactModel,
+  context: ContextSnapshot,
+  abortSet: Set<Task>,
+): Task {
   const id = request.nextChunkId++;
-  const segment = {
+  const task = {
     id,
+    status: PENDING,
     model,
-    ping: () => pingSegment(request, segment),
+    context,
+    ping: () => pingTask(request, task),
   };
-  return segment;
+  abortSet.add(task);
+  return task;
 }
 
 function serializeByValueID(id: number): string {
@@ -221,7 +309,6 @@ function isObjectPrototype(object): boolean {
   if (!object) {
     return false;
   }
-  // $FlowFixMe
   const ObjectPrototype = Object.prototype;
   if (object === ObjectPrototype) {
     return true;
@@ -311,7 +398,6 @@ function describeObjectForErrorMessage(
 ): string {
   if (isArray(objectOrArray)) {
     let str = '[';
-    // $FlowFixMe: Should be refined by now.
     const array: $ReadOnlyArray<ReactModel> = objectOrArray;
     for (let i = 0; i < array.length; i++) {
       if (i > 0) {
@@ -336,7 +422,6 @@ function describeObjectForErrorMessage(
     return str;
   } else {
     let str = '{';
-    // $FlowFixMe: Should be refined by now.
     const object: {+[key: string | number]: ReactModel} = objectOrArray;
     const names = Object.keys(object);
     for (let i = 0; i < names.length; i++) {
@@ -365,6 +450,9 @@ function describeObjectForErrorMessage(
   }
 }
 
+let insideContextProps = null;
+let isInsideContextValue = false;
+
 export function resolveModelToJSON(
   request: Request,
   parent: {+[key: string | number]: ReactModel} | $ReadOnlyArray<ReactModel>,
@@ -390,38 +478,72 @@ export function resolveModelToJSON(
   switch (value) {
     case REACT_ELEMENT_TYPE:
       return '$';
-    case REACT_LAZY_TYPE:
-      throw new Error(
-        'React Lazy Components are not yet supported on the server.',
-      );
+  }
+
+  if (__DEV__) {
+    if (
+      parent[0] === REACT_ELEMENT_TYPE &&
+      parent[1] &&
+      parent[1].$$typeof === REACT_PROVIDER_TYPE &&
+      key === '3'
+    ) {
+      insideContextProps = value;
+    } else if (insideContextProps === parent && key === 'value') {
+      isInsideContextValue = true;
+    } else if (insideContextProps === parent && key === 'children') {
+      isInsideContextValue = false;
+    }
   }
 
   // Resolve server components.
   while (
     typeof value === 'object' &&
     value !== null &&
-    value.$$typeof === REACT_ELEMENT_TYPE
+    ((value: any).$$typeof === REACT_ELEMENT_TYPE ||
+      (value: any).$$typeof === REACT_LAZY_TYPE)
   ) {
-    // TODO: Concatenate keys of parents onto children.
-    const element: React$Element<any> = (value: any);
+    if (__DEV__) {
+      if (isInsideContextValue) {
+        console.error('React elements are not allowed in ServerContext');
+      }
+    }
+
     try {
-      // Attempt to render the server component.
-      value = attemptResolveElement(
-        element.type,
-        element.key,
-        element.ref,
-        element.props,
-      );
+      switch ((value: any).$$typeof) {
+        case REACT_ELEMENT_TYPE: {
+          // TODO: Concatenate keys of parents onto children.
+          const element: React$Element<any> = (value: any);
+          // Attempt to render the server component.
+          value = attemptResolveElement(
+            element.type,
+            element.key,
+            element.ref,
+            element.props,
+          );
+          break;
+        }
+        case REACT_LAZY_TYPE: {
+          const payload = (value: any)._payload;
+          const init = (value: any)._init;
+          value = init(payload);
+          break;
+        }
+      }
     } catch (x) {
       if (typeof x === 'object' && x !== null && typeof x.then === 'function') {
-        // Something suspended, we'll need to create a new segment and resolve it later.
+        // Something suspended, we'll need to create a new task and resolve it later.
         request.pendingChunks++;
-        const newSegment = createSegment(request, value);
-        const ping = newSegment.ping;
+        const newTask = createTask(
+          request,
+          value,
+          getActiveContext(),
+          request.abortableTasks,
+        );
+        const ping = newTask.ping;
         x.then(ping, ping);
-        return serializeByRefID(newSegment.id);
+        return serializeByRefID(newTask.id);
       } else {
-        reportError(request, x);
+        logRecoverableError(request, x);
         // Something errored. We'll still send everything we have up until this point.
         // We'll replace this element with a lazy reference that throws on the client
         // once it gets rendered.
@@ -478,6 +600,25 @@ export function resolveModelToJSON(
         emitErrorChunk(request, errorId, x);
         return serializeByValueID(errorId);
       }
+    } else if ((value: any).$$typeof === REACT_PROVIDER_TYPE) {
+      const providerKey = ((value: any): ReactProviderType<any>)._context
+        ._globalName;
+      const writtenProviders = request.writtenProviders;
+      let providerId = writtenProviders.get(key);
+      if (providerId === undefined) {
+        request.pendingChunks++;
+        providerId = request.nextChunkId++;
+        writtenProviders.set(providerKey, providerId);
+        emitProviderChunk(request, providerId, providerKey);
+      }
+      return serializeByValueID(providerId);
+    } else if (value === POP) {
+      popProvider();
+      if (__DEV__) {
+        insideContextProps = null;
+        isInsideContextValue = false;
+      }
+      return (undefined: any);
     }
 
     if (__DEV__) {
@@ -515,6 +656,7 @@ export function resolveModelToJSON(
         }
       }
     }
+
     return value;
   }
 
@@ -604,7 +746,7 @@ export function resolveModelToJSON(
   );
 }
 
-function reportError(request: Request, error: mixed): void {
+function logRecoverableError(request: Request, error: mixed): void {
   const onError = request.onError;
   onError(error);
 }
@@ -657,20 +799,34 @@ function emitSymbolChunk(request: Request, id: number, name: string): void {
   request.completedModuleChunks.push(processedChunk);
 }
 
-function retrySegment(request: Request, segment: Segment): void {
+function emitProviderChunk(
+  request: Request,
+  id: number,
+  contextName: string,
+): void {
+  const processedChunk = processProviderChunk(request, id, contextName);
+  request.completedJSONChunks.push(processedChunk);
+}
+
+function retryTask(request: Request, task: Task): void {
+  if (task.status !== PENDING) {
+    // We completed this by other means before we had a chance to retry it.
+    return;
+  }
+  switchContext(task.context);
   try {
-    let value = segment.model;
+    let value = task.model;
     while (
       typeof value === 'object' &&
       value !== null &&
-      value.$$typeof === REACT_ELEMENT_TYPE
+      (value: any).$$typeof === REACT_ELEMENT_TYPE
     ) {
       // TODO: Concatenate keys of parents onto children.
       const element: React$Element<any> = (value: any);
       // Attempt to render the server component.
-      // Doing this here lets us reuse this same segment if the next component
+      // Doing this here lets us reuse this same task if the next component
       // also suspends.
-      segment.model = value;
+      task.model = value;
       value = attemptResolveElement(
         element.type,
         element.key,
@@ -678,45 +834,60 @@ function retrySegment(request: Request, segment: Segment): void {
         element.props,
       );
     }
-    const processedChunk = processModelChunk(request, segment.id, value);
+    const processedChunk = processModelChunk(request, task.id, value);
     request.completedJSONChunks.push(processedChunk);
+    request.abortableTasks.delete(task);
+    task.status = COMPLETED;
   } catch (x) {
     if (typeof x === 'object' && x !== null && typeof x.then === 'function') {
       // Something suspended again, let's pick it back up later.
-      const ping = segment.ping;
+      const ping = task.ping;
       x.then(ping, ping);
       return;
     } else {
-      reportError(request, x);
+      request.abortableTasks.delete(task);
+      task.status = ERRORED;
+      logRecoverableError(request, x);
       // This errored, we need to serialize this error to the
-      emitErrorChunk(request, segment.id, x);
+      emitErrorChunk(request, task.id, x);
     }
   }
 }
 
 function performWork(request: Request): void {
   const prevDispatcher = ReactCurrentDispatcher.current;
-  const prevCache = currentCache;
+  const prevCache = getCurrentCache();
   ReactCurrentDispatcher.current = Dispatcher;
-  currentCache = request.cache;
+  setCurrentCache(request.cache);
+  prepareToUseHooksForRequest(request);
 
   try {
-    const pingedSegments = request.pingedSegments;
-    request.pingedSegments = [];
-    for (let i = 0; i < pingedSegments.length; i++) {
-      const segment = pingedSegments[i];
-      retrySegment(request, segment);
+    const pingedTasks = request.pingedTasks;
+    request.pingedTasks = [];
+    for (let i = 0; i < pingedTasks.length; i++) {
+      const task = pingedTasks[i];
+      retryTask(request, task);
     }
     if (request.destination !== null) {
       flushCompletedChunks(request, request.destination);
     }
   } catch (error) {
-    reportError(request, error);
+    logRecoverableError(request, error);
     fatalError(request, error);
   } finally {
     ReactCurrentDispatcher.current = prevDispatcher;
-    currentCache = prevCache;
+    setCurrentCache(prevCache);
+    resetHooksForRequest();
   }
+}
+
+function abortTask(task: Task, request: Request, errorId: number): void {
+  task.status = ABORTED;
+  // Instead of emitting an error per task.id, we emit a model that only
+  // has a single value referencing the error.
+  const ref = serializeByValueID(errorId);
+  const processedChunk = processReferenceChunk(request, task.id, ref);
+  request.completedJSONChunks.push(processedChunk);
 }
 
 function flushCompletedChunks(
@@ -732,7 +903,8 @@ function flushCompletedChunks(
     for (; i < moduleChunks.length; i++) {
       request.pendingChunks--;
       const chunk = moduleChunks[i];
-      if (!writeChunk(destination, chunk)) {
+      const keepWriting: boolean = writeChunkAndReturn(destination, chunk);
+      if (!keepWriting) {
         request.destination = null;
         i++;
         break;
@@ -745,7 +917,8 @@ function flushCompletedChunks(
     for (; i < jsonChunks.length; i++) {
       request.pendingChunks--;
       const chunk = jsonChunks[i];
-      if (!writeChunk(destination, chunk)) {
+      const keepWriting: boolean = writeChunkAndReturn(destination, chunk);
+      if (!keepWriting) {
         request.destination = null;
         i++;
         break;
@@ -760,7 +933,8 @@ function flushCompletedChunks(
     for (; i < errorChunks.length; i++) {
       request.pendingChunks--;
       const chunk = errorChunks[i];
-      if (!writeChunk(destination, chunk)) {
+      const keepWriting: boolean = writeChunkAndReturn(destination, chunk);
+      if (!keepWriting) {
         request.destination = null;
         i++;
         break;
@@ -790,65 +964,61 @@ export function startFlowing(request: Request, destination: Destination): void {
   if (request.status === CLOSED) {
     return;
   }
+  if (request.destination !== null) {
+    // We're already flowing.
+    return;
+  }
   request.destination = destination;
   try {
     flushCompletedChunks(request, destination);
   } catch (error) {
-    reportError(request, error);
+    logRecoverableError(request, error);
     fatalError(request, error);
   }
 }
 
-function unsupportedHook(): void {
-  throw new Error('This Hook is not supported in Server Components.');
-}
+// This is called to early terminate a request. It creates an error at all pending tasks.
+export function abort(request: Request, reason: mixed): void {
+  try {
+    const abortableTasks = request.abortableTasks;
+    if (abortableTasks.size > 0) {
+      // We have tasks to abort. We'll emit one error row and then emit a reference
+      // to that row from every row that's still remaining.
+      const error =
+        reason === undefined
+          ? new Error('The render was aborted by the server without a reason.')
+          : reason;
 
-function unsupportedRefresh(): void {
-  if (!currentCache) {
-    throw new Error(
-      'Refreshing the cache is not supported in Server Components.',
-    );
+      logRecoverableError(request, error);
+      request.pendingChunks++;
+      const errorId = request.nextChunkId++;
+      emitErrorChunk(request, errorId, error);
+      abortableTasks.forEach(task => abortTask(task, request, errorId));
+      abortableTasks.clear();
+    }
+    if (request.destination !== null) {
+      flushCompletedChunks(request, request.destination);
+    }
+  } catch (error) {
+    logRecoverableError(request, error);
+    fatalError(request, error);
   }
 }
 
-let currentCache: Map<Function, mixed> | null = null;
-
-const Dispatcher: DispatcherType = {
-  useMemo<T>(nextCreate: () => T): T {
-    return nextCreate();
-  },
-  useCallback<T>(callback: T): T {
-    return callback;
-  },
-  useDebugValue(): void {},
-  useDeferredValue: (unsupportedHook: any),
-  useTransition: (unsupportedHook: any),
-  getCacheForType<T>(resourceType: () => T): T {
-    if (!currentCache) {
-      throw new Error('Reading the cache is only supported while rendering.');
+function importServerContexts(
+  contexts?: Array<[string, ServerContextJSONValue]>,
+) {
+  if (contexts) {
+    const prevContext = getActiveContext();
+    switchContext(rootContextSnapshot);
+    for (let i = 0; i < contexts.length; i++) {
+      const [name, value] = contexts[i];
+      const context = getOrCreateServerContext(name);
+      pushProvider(context, value);
     }
-
-    let entry: T | void = (currentCache.get(resourceType): any);
-    if (entry === undefined) {
-      entry = resourceType();
-      // TODO: Warn if undefined?
-      currentCache.set(resourceType, entry);
-    }
-    return entry;
-  },
-  readContext: (unsupportedHook: any),
-  useContext: (unsupportedHook: any),
-  useReducer: (unsupportedHook: any),
-  useRef: (unsupportedHook: any),
-  useState: (unsupportedHook: any),
-  useInsertionEffect: (unsupportedHook: any),
-  useLayoutEffect: (unsupportedHook: any),
-  useImperativeHandle: (unsupportedHook: any),
-  useEffect: (unsupportedHook: any),
-  useId: (unsupportedHook: any),
-  useMutableSource: (unsupportedHook: any),
-  useSyncExternalStore: (unsupportedHook: any),
-  useCacheRefresh(): <T>(?() => T, ?T) => void {
-    return unsupportedRefresh;
-  },
-};
+    const importedContext = getActiveContext();
+    switchContext(prevContext);
+    return importedContext;
+  }
+  return rootContextSnapshot;
+}

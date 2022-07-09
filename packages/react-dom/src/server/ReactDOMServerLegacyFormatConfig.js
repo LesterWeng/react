@@ -12,6 +12,7 @@ import type {FormatContext} from './ReactDOMServerFormatConfig';
 import {
   createResponseState as createResponseStateImpl,
   pushTextInstance as pushTextInstanceImpl,
+  pushSegmentFinale as pushSegmentFinaleImpl,
   writeStartCompletedSuspenseBoundary as writeStartCompletedSuspenseBoundaryImpl,
   writeStartClientRenderedSuspenseBoundary as writeStartClientRenderedSuspenseBoundaryImpl,
   writeEndCompletedSuspenseBoundary as writeEndCompletedSuspenseBoundaryImpl,
@@ -34,6 +35,7 @@ export type ResponseState = {
   placeholderPrefix: PrecomputedChunk,
   segmentPrefix: PrecomputedChunk,
   boundaryPrefix: string,
+  idPrefix: string,
   nextSuspenseID: number,
   sentCompleteSegmentFunction: boolean,
   sentCompleteBoundaryFunction: boolean,
@@ -54,6 +56,7 @@ export function createResponseState(
     placeholderPrefix: responseState.placeholderPrefix,
     segmentPrefix: responseState.segmentPrefix,
     boundaryPrefix: responseState.boundaryPrefix,
+    idPrefix: responseState.idPrefix,
     nextSuspenseID: responseState.nextSuspenseID,
     sentCompleteSegmentFunction: responseState.sentCompleteSegmentFunction,
     sentCompleteBoundaryFunction: responseState.sentCompleteBoundaryFunction,
@@ -79,6 +82,7 @@ export {
   getChildFormatContext,
   UNINITIALIZED_SUSPENSE_BOUNDARY_ID,
   assignSuspenseBoundaryID,
+  makeId,
   pushStartInstance,
   pushEndInstance,
   pushStartCompletedSuspenseBoundary,
@@ -102,11 +106,31 @@ export function pushTextInstance(
   target: Array<Chunk | PrecomputedChunk>,
   text: string,
   responseState: ResponseState,
-): void {
+  textEmbedded: boolean,
+): boolean {
   if (responseState.generateStaticMarkup) {
     target.push(stringToChunk(escapeTextForBrowser(text)));
+    return false;
   } else {
-    pushTextInstanceImpl(target, text, responseState);
+    return pushTextInstanceImpl(target, text, responseState, textEmbedded);
+  }
+}
+
+export function pushSegmentFinale(
+  target: Array<Chunk | PrecomputedChunk>,
+  responseState: ResponseState,
+  lastPushedText: boolean,
+  textEmbedded: boolean,
+): void {
+  if (responseState.generateStaticMarkup) {
+    return;
+  } else {
+    return pushSegmentFinaleImpl(
+      target,
+      responseState,
+      lastPushedText,
+      textEmbedded,
+    );
   }
 }
 
@@ -124,6 +148,10 @@ export function writeStartCompletedSuspenseBoundary(
 export function writeStartClientRenderedSuspenseBoundary(
   destination: Destination,
   responseState: ResponseState,
+  // flushing these error arguments are not currently supported in this legacy streaming format.
+  errorDigest: ?string,
+  errorMessage: ?string,
+  errorComponentStack: ?string,
 ): boolean {
   if (responseState.generateStaticMarkup) {
     // A client rendered boundary is done and doesn't need a representation in the HTML
@@ -133,6 +161,9 @@ export function writeStartClientRenderedSuspenseBoundary(
   return writeStartClientRenderedSuspenseBoundaryImpl(
     destination,
     responseState,
+    errorDigest,
+    errorMessage,
+    errorComponentStack,
   );
 }
 export function writeEndCompletedSuspenseBoundary(

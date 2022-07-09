@@ -28,6 +28,11 @@ function createDrainHandler(destination, request) {
   return () => startFlowing(request, destination);
 }
 
+function createAbortHandler(request, reason) {
+  // eslint-disable-next-line react-internal/prod-error-codes
+  return () => abort(request, new Error(reason));
+}
+
 type Options = {|
   identifierPrefix?: string,
   namespaceURI?: string,
@@ -36,15 +41,16 @@ type Options = {|
   bootstrapScripts?: Array<string>,
   bootstrapModules?: Array<string>,
   progressiveChunkSize?: number,
-  onCompleteShell?: () => void,
-  onCompleteAll?: () => void,
-  onError?: (error: mixed) => void,
+  onShellReady?: () => void,
+  onShellError?: (error: mixed) => void,
+  onAllReady?: () => void,
+  onError?: (error: mixed) => ?string,
 |};
 
-type Controls = {|
+type PipeableStream = {|
   // Cancel any pending I/O and put anything remaining into
   // client rendered mode.
-  abort(): void,
+  abort(reason: mixed): void,
   pipe<T: Writable>(destination: T): T,
 |};
 
@@ -61,15 +67,17 @@ function createRequestImpl(children: ReactNodeList, options: void | Options) {
     createRootFormatContext(options ? options.namespaceURI : undefined),
     options ? options.progressiveChunkSize : undefined,
     options ? options.onError : undefined,
-    options ? options.onCompleteAll : undefined,
-    options ? options.onCompleteShell : undefined,
+    options ? options.onAllReady : undefined,
+    options ? options.onShellReady : undefined,
+    options ? options.onShellError : undefined,
+    undefined,
   );
 }
 
 function renderToPipeableStream(
   children: ReactNodeList,
   options?: Options,
-): Controls {
+): PipeableStream {
   const request = createRequestImpl(children, options);
   let hasStartedFlowing = false;
   startWork(request);
@@ -83,10 +91,21 @@ function renderToPipeableStream(
       hasStartedFlowing = true;
       startFlowing(request, destination);
       destination.on('drain', createDrainHandler(destination, request));
+      destination.on(
+        'error',
+        createAbortHandler(
+          request,
+          'The destination stream errored while writing data.',
+        ),
+      );
+      destination.on(
+        'close',
+        createAbortHandler(request, 'The destination stream closed early.'),
+      );
       return destination;
     },
-    abort() {
-      abort(request);
+    abort(reason: mixed) {
+      abort(request, reason);
     },
   };
 }

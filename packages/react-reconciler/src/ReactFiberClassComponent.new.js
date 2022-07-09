@@ -9,7 +9,7 @@
 
 import type {Fiber} from './ReactInternalTypes';
 import type {Lanes} from './ReactFiberLane.new';
-import type {UpdateQueue} from './ReactUpdateQueue.new';
+import type {UpdateQueue} from './ReactFiberClassUpdateQueue.new';
 import type {Flags} from './ReactFiberFlags';
 
 import * as React from 'react';
@@ -27,7 +27,6 @@ import {
   warnAboutDeprecatedLifecycles,
   enableStrictEffects,
   enableLazyContextPropagation,
-  enableSuspenseLayoutEffectSemantics,
 } from 'shared/ReactFeatureFlags';
 import ReactStrictModeWarnings from './ReactStrictModeWarnings.new';
 import {isMounted} from './ReactFiberTreeReflection';
@@ -35,9 +34,9 @@ import {get as getInstance, set as setInstance} from 'shared/ReactInstanceMap';
 import shallowEqual from 'shared/shallowEqual';
 import getComponentNameFromFiber from 'react-reconciler/src/getComponentNameFromFiber';
 import getComponentNameFromType from 'shared/getComponentNameFromType';
+import assign from 'shared/assign';
 import isArray from 'shared/isArray';
 import {REACT_CONTEXT_TYPE, REACT_PROVIDER_TYPE} from 'shared/ReactSymbols';
-import {setIsStrictModeForDevtools} from './ReactFiberDevToolsHook.new';
 
 import {resolveDefaultProps} from './ReactFiberLazyComponent.new';
 import {
@@ -58,7 +57,7 @@ import {
   ForceUpdate,
   initializeUpdateQueue,
   cloneUpdateQueue,
-} from './ReactUpdateQueue.new';
+} from './ReactFiberClassUpdateQueue.new';
 import {NoLanes} from './ReactFiberLane.new';
 import {
   cacheContext,
@@ -74,11 +73,11 @@ import {
   scheduleUpdateOnFiber,
 } from './ReactFiberWorkLoop.new';
 import {logForceUpdateScheduled, logStateUpdateScheduled} from './DebugTracing';
-
 import {
   markForceUpdateScheduled,
   markStateUpdateScheduled,
-} from './SchedulingProfiler';
+  setIsStrictModeForDevtools,
+} from './ReactFiberDevToolsHook.new';
 
 const fakeInternalInstance = {};
 
@@ -187,7 +186,7 @@ function applyDerivedStateFromProps(
   const memoizedState =
     partialState === null || partialState === undefined
       ? prevState
-      : Object.assign({}, prevState, partialState);
+      : assign({}, prevState, partialState);
   workInProgress.memoizedState = memoizedState;
 
   // Once the update queue is empty, persist the derived state onto the
@@ -215,9 +214,9 @@ const classComponentUpdater = {
       update.callback = callback;
     }
 
-    enqueueUpdate(fiber, update, lane);
-    const root = scheduleUpdateOnFiber(fiber, lane, eventTime);
+    const root = enqueueUpdate(fiber, update, lane);
     if (root !== null) {
+      scheduleUpdateOnFiber(root, fiber, lane, eventTime);
       entangleTransitions(root, fiber, lane);
     }
 
@@ -250,9 +249,9 @@ const classComponentUpdater = {
       update.callback = callback;
     }
 
-    enqueueUpdate(fiber, update, lane);
-    const root = scheduleUpdateOnFiber(fiber, lane, eventTime);
+    const root = enqueueUpdate(fiber, update, lane);
     if (root !== null) {
+      scheduleUpdateOnFiber(root, fiber, lane, eventTime);
       entangleTransitions(root, fiber, lane);
     }
 
@@ -284,9 +283,9 @@ const classComponentUpdater = {
       update.callback = callback;
     }
 
-    enqueueUpdate(fiber, update, lane);
-    const root = scheduleUpdateOnFiber(fiber, lane, eventTime);
+    const root = enqueueUpdate(fiber, update, lane);
     if (root !== null) {
+      scheduleUpdateOnFiber(root, fiber, lane, eventTime);
       entangleTransitions(root, fiber, lane);
     }
 
@@ -908,10 +907,7 @@ function mountClassInstance(
   }
 
   if (typeof instance.componentDidMount === 'function') {
-    let fiberFlags: Flags = Update;
-    if (enableSuspenseLayoutEffectSemantics) {
-      fiberFlags |= LayoutStatic;
-    }
+    let fiberFlags: Flags = Update | LayoutStatic;
     if (
       __DEV__ &&
       enableStrictEffects &&
@@ -989,10 +985,7 @@ function resumeMountClassInstance(
     // If an update was already in progress, we should schedule an Update
     // effect even though we're bailing out, so that cWU/cDU are called.
     if (typeof instance.componentDidMount === 'function') {
-      let fiberFlags: Flags = Update;
-      if (enableSuspenseLayoutEffectSemantics) {
-        fiberFlags |= LayoutStatic;
-      }
+      let fiberFlags: Flags = Update | LayoutStatic;
       if (
         __DEV__ &&
         enableStrictEffects &&
@@ -1043,10 +1036,7 @@ function resumeMountClassInstance(
       }
     }
     if (typeof instance.componentDidMount === 'function') {
-      let fiberFlags: Flags = Update;
-      if (enableSuspenseLayoutEffectSemantics) {
-        fiberFlags |= LayoutStatic;
-      }
+      let fiberFlags: Flags = Update | LayoutStatic;
       if (
         __DEV__ &&
         enableStrictEffects &&
@@ -1060,10 +1050,7 @@ function resumeMountClassInstance(
     // If an update was already in progress, we should schedule an Update
     // effect even though we're bailing out, so that cWU/cDU are called.
     if (typeof instance.componentDidMount === 'function') {
-      let fiberFlags: Flags = Update;
-      if (enableSuspenseLayoutEffectSemantics) {
-        fiberFlags |= LayoutStatic;
-      }
+      let fiberFlags: Flags = Update | LayoutStatic;
       if (
         __DEV__ &&
         enableStrictEffects &&
