@@ -15,10 +15,6 @@ import type {
 } from './ReactInternalTypes';
 import type {RootTag} from './ReactRootTags';
 import type {Cache} from './ReactFiberCacheComponent.old';
-import type {
-  PendingSuspenseBoundaries,
-  Transition,
-} from './ReactFiberTracingMarkerComponent.old';
 
 import {noTimeout, supportsHydration} from './ReactFiberHostConfig';
 import {createHostRootFiber} from './ReactFiber.old';
@@ -45,8 +41,6 @@ export type RootState = {
   element: any,
   isDehydrated: boolean,
   cache: Cache,
-  pendingSuspenseBoundaries: PendingSuspenseBoundaries | null,
-  transitions: Set<Transition> | null,
 };
 
 // API-struct:FiberRootNode
@@ -81,6 +75,8 @@ function FiberRootNode(
   this.entangledLanes = NoLanes;
   this.entanglements = createLaneMap(NoLanes);
 
+  this.hiddenUpdates = createLaneMap(null);
+
   this.identifierPrefix = identifierPrefix;
   this.onRecoverableError = onRecoverableError;
 
@@ -97,6 +93,7 @@ function FiberRootNode(
     this.hydrationCallbacks = null;
   }
 
+  this.incompleteTransitions = new Map();
   if (enableTransitionTracing) {
     this.transitionCallbacks = null;
     const transitionLanesMap = (this.transitionLanes = []);
@@ -188,8 +185,6 @@ export function createFiberRoot(
       element: initialChildren,
       isDehydrated: hydrate,
       cache: initialCache,
-      transitions: null,
-      pendingSuspenseBoundaries: null,
     };
     uninitializedFiber.memoizedState = initialState;
   } else {
@@ -197,8 +192,6 @@ export function createFiberRoot(
       element: initialChildren,
       isDehydrated: hydrate,
       cache: (null: any), // not enabled yet
-      transitions: null,
-      pendingSuspenseBoundaries: null,
     };
     uninitializedFiber.memoizedState = initialState;
   }

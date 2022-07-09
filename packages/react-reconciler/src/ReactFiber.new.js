@@ -19,6 +19,7 @@ import type {
   OffscreenProps,
   OffscreenInstance,
 } from './ReactFiberOffscreenComponent';
+import type {TracingMarkerInstance} from './ReactFiberTracingMarkerComponent.new';
 
 import {
   createRootStrictEffectsByDefault,
@@ -717,6 +718,9 @@ export function createFiberFromOffscreen(
   fiber.lanes = lanes;
   const primaryChildInstance: OffscreenInstance = {
     isHidden: false,
+    pendingMarkers: null,
+    retryCache: null,
+    transitions: null,
   };
   fiber.stateNode = primaryChildInstance;
   return fiber;
@@ -731,6 +735,15 @@ export function createFiberFromLegacyHidden(
   const fiber = createFiber(LegacyHiddenComponent, pendingProps, key, mode);
   fiber.elementType = REACT_LEGACY_HIDDEN_TYPE;
   fiber.lanes = lanes;
+  // Adding a stateNode for legacy hidden because it's currently using
+  // the offscreen implementation, which depends on a state node
+  const instance: OffscreenInstance = {
+    isHidden: false,
+    pendingMarkers: null,
+    transitions: null,
+    retryCache: null,
+  };
+  fiber.stateNode = instance;
   return fiber;
 }
 
@@ -755,6 +768,11 @@ export function createFiberFromTracingMarker(
   const fiber = createFiber(TracingMarkerComponent, pendingProps, key, mode);
   fiber.elementType = REACT_TRACING_MARKER_TYPE;
   fiber.lanes = lanes;
+  const tracingMarkerInstance: TracingMarkerInstance = {
+    transitions: null,
+    pendingSuspenseBoundaries: null,
+  };
+  fiber.stateNode = tracingMarkerInstance;
   return fiber;
 }
 
