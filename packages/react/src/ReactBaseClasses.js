@@ -53,7 +53,7 @@ Component.prototype.isReactComponent = {};
  * @final
  * @protected
  */
-// API-feature:this.setState
+// API-trigger:this.setState
 Component.prototype.setState = function(partialState, callback) {
   if (
     typeof partialState !== 'object' &&

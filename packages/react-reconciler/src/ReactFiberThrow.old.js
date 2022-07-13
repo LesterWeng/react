@@ -351,6 +351,7 @@ function markSuspenseBoundaryShouldCapture(
   return suspenseBoundary;
 }
 
+// API-render:throwException，render阶段异常处理
 function throwException(
   root: FiberRoot,
   returnFiber: Fiber,
@@ -368,6 +369,7 @@ function throwException(
     }
   }
 
+  // API-record:抛出的thenable类型（Suspense子组件内）特殊处理
   if (
     value !== null &&
     typeof value === 'object' &&

@@ -846,8 +846,8 @@ function completeDehydratedSuspenseBoundary(
   }
 }
 
-// API-render:completeWork
-// hostComponent update时生成fiberNode.updateQueue，保存形如['key1', 'value1', 'key2', 'value2']的props
+// API-render:completeWork，bubbleProperties会冒泡child节点(child+所有sibling)的flags和lanes到subtreeFlags和childLanes
+// 另外hostComponent update时生成fiberNode.updateQueue，保存形如['key1', 'value1', 'key2', 'value2']的props
 function completeWork(
   current: Fiber | null,
   workInProgress: Fiber,

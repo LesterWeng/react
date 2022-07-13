@@ -573,7 +573,7 @@ function requestRetryLane(fiber: Fiber) {
   return claimNextRetryLane();
 }
 
-// API-start:scheduleUpdateOnFiber
+// API-triggerPhase:scheduleUpdateOnFiber
 export function scheduleUpdateOnFiber(
   root: FiberRoot,
   fiber: Fiber,
@@ -692,7 +692,7 @@ export function scheduleUpdateOnFiber(
       // scheduleCallbackForFiber to preserve the ability to schedule a callback
       // without immediately flushing it. We only do this for user-initiated
       // updates, to preserve historical behavior of legacy mode.
-      // API-feature:setTimeout等跳出React同步控制时，NoContext时立即调度
+      // API-triggerPhase:同步模式下，setTimeout等跳出React同步控制时，NoContext时立即调度
       resetRenderTimer();
       flushSyncCallbacksOnlyInLegacyMode();
     }
@@ -736,7 +736,7 @@ export function isUnsafeClassRenderPhaseUpdate(fiber: Fiber) {
 // of the existing task is the same as the priority of the next level that the
 // root has work on. This function is called on every update, and right before
 // exiting a task.
-// API-start:ensureRootIsScheduled
+// API-triggerPhase:ensureRootIsScheduled
 function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
   const existingCallbackNode = root.callbackNode;
 
@@ -763,7 +763,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
   // We use the highest priority lane to represent the priority of the callback.
   const newCallbackPriority = getHighestPriorityLane(nextLanes);
 
-  // API-feature:多个setState情形,复用已存在的task
+  // API-triggerPhase:多个同优先级task的情形,复用已存在的task
   // Check if there's an existing task. We may be able to reuse it.
   const existingCallbackPriority = root.callbackPriority;
   if (
@@ -872,7 +872,6 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
 
 // This is the entry point for every concurrent task, i.e. anything that
 // goes through Scheduler.
-// API-start:performConcurrentWorkOnRoot
 function performConcurrentWorkOnRoot(root, didTimeout) {
   if (enableProfilerTimer && enableProfilerNestedUpdatePhase) {
     resetNestedUpdateFlag();
@@ -1068,6 +1067,7 @@ export function queueRecoverableErrors(errors: Array<CapturedValue<mixed>>) {
   }
 }
 
+// API-commit:finishConcurrentRender
 function finishConcurrentRender(root, exitStatus, lanes) {
   switch (exitStatus) {
     case RootInProgress:
@@ -1273,7 +1273,6 @@ function markRootSuspended(root, suspendedLanes) {
 
 // This is the entry point for synchronous tasks that don't go
 // through Scheduler
-// API-start:performSyncWorkOnRoot
 function performSyncWorkOnRoot(root) {
   if (enableProfilerTimer && enableProfilerNestedUpdatePhase) {
     syncNestedUpdateFlag();
@@ -1364,7 +1363,7 @@ export function deferredUpdates<A>(fn: () => A): A {
   }
 }
 
-// API-batchUpdates
+// API-trigger:batchUpdates
 export function batchedUpdates<A, R>(fn: A => R, a: A): R {
   const prevExecutionContext = executionContext;
   executionContext |= BatchedContext;
@@ -1786,7 +1785,7 @@ function renderRootSync(root: FiberRoot, lanes: Lanes) {
 
 // The work loop is an extremely hot path. Tell Closure not to inline it.
 /** @noinline */
-// API-start:workLoopSync
+// API-render:workLoopSync
 function workLoopSync() {
   // Already timed out, so perform work without checking if we need to yield.
   while (workInProgress !== null) {
@@ -1794,6 +1793,7 @@ function workLoopSync() {
   }
 }
 
+// API-render:renderRootConcurrent
 function renderRootConcurrent(root: FiberRoot, lanes: Lanes) {
   const prevExecutionContext = executionContext;
   executionContext |= RenderContext;
@@ -1874,6 +1874,7 @@ function renderRootConcurrent(root: FiberRoot, lanes: Lanes) {
   }
 }
 
+// API-render:workLoopConcurrent
 /** @noinline */
 function workLoopConcurrent() {
   // Perform work until Scheduler asks us to yield
@@ -2138,7 +2139,7 @@ function commitRootImpl(
   // might get scheduled in the commit phase. (See #16714.)
   // TODO: Delete all other places that schedule the passive effect callback
   // They're redundant.
-  // API-commit:useEffect异步调度第一步,调度passiveEffect后执行
+  // API-hookPhase:useEffect异步调度第一步,调度passiveEffect后执行
   if (
     (finishedWork.subtreeFlags & PassiveMask) !== NoFlags ||
     (finishedWork.flags & PassiveMask) !== NoFlags
@@ -2277,7 +2278,7 @@ function commitRootImpl(
   }
 
   const rootDidHavePassiveEffects = rootDoesHavePassiveEffects;
-  // API-commit:useEffect异步调用第二步,赋值rootWithPendingPassiveEffects
+  // API-hookPhase:useEffect异步调用第二步,赋值rootWithPendingPassiveEffects
   if (rootDoesHavePassiveEffects) {
     // This commit has passive effects. Stash a reference to them. But don't
     // schedule a callback until after flushing layout work.
@@ -2420,7 +2421,6 @@ function releaseRootPooledCache(root: FiberRoot, remainingLanes: Lanes) {
   }
 }
 
-// API-commit:flushPassiveEffects,执行passiveEffect
 export function flushPassiveEffects(): boolean {
   // Returns whether passive effects were flushed.
   // TODO: Combine this check with the one in flushPassiveEFfectsImpl. We should

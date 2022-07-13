@@ -200,7 +200,7 @@ function warnOnInvalidCallback(callback: mixed, callerName: string): void {
   }
 }
 
-// API-start:legacyRenderSubtreeIntoContainer，会调用unbatchedUpdates
+// API-triggerPhase:legacyRenderSubtreeIntoContainer，会调用unbatchedUpdates
 function legacyRenderSubtreeIntoContainer(
   parentComponent: ?React$Component<any, any>,
   children: ReactNodeList,
@@ -311,7 +311,7 @@ export function hydrate(
   );
 }
 
-// API-feature:ReactDOM.render
+// API-trigger:ReactDOM.render
 // 不同container(根dom元素)执行ReactDOM.render时都会创建自己的FiberRootNode，
 // 相同container重复执行时，调用updateContainer进行更新)
 export function render(

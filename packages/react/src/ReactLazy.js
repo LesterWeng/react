@@ -118,6 +118,7 @@ function lazyInitializer<T>(payload: Payload<T>): T {
   }
 }
 
+// API-trigger:React.lazy
 export function lazy<T>(
   ctor: () => Thenable<{default: T, ...}>,
 ): LazyComponent<T, Payload<T>> {

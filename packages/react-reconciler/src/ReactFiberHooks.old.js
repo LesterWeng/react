@@ -633,7 +633,7 @@ export function resetHooksAfterThrow(): void {
   localIdCounter = 0;
 }
 
-// API-feature:mountWorkInProgressHook
+// API-hookPhase:mountWorkInProgressHook
 function mountWorkInProgressHook(): Hook {
   // API-struct:hook，位于fiberNode.memoizedState，单链表
   const hook: Hook = {
@@ -657,7 +657,7 @@ function mountWorkInProgressHook(): Hook {
   return workInProgressHook;
 }
 
-// API-feature:updateWorkInProgressHook，沿着单向链表获取当前hook
+// API-hookPhase:updateWorkInProgressHook，沿着单向链表获取当前hook
 function updateWorkInProgressHook(): Hook {
   // This function is used both for updates and for re-renders triggered by a
   // render phase update. It assumes there is either a current hook we can
@@ -734,6 +734,7 @@ function basicStateReducer<S>(state: S, action: BasicStateAction<S>): S {
   return typeof action === 'function' ? action(state) : action;
 }
 
+// API-hook:mountReducer
 function mountReducer<S, I, A>(
   reducer: (S, A) => S,
   initialArg: I,
@@ -762,7 +763,8 @@ function mountReducer<S, I, A>(
   ): any));
   return [hook.memoizedState, dispatch];
 }
-// API-feature:updateState, updateReducer，dispatchAction后renderRootSync再次执行updateReducer时才会根据baseQueue更新memoizedState
+
+// API-hook:updateReducer
 function updateReducer<S, I, A>(
   reducer: (S, A) => S,
   initialArg: I,
@@ -1510,6 +1512,7 @@ function forceStoreRerender(fiber) {
   }
 }
 
+// API-hook:mountState
 function mountState<S>(
   initialState: (() => S) | S,
 ): [S, Dispatch<BasicStateAction<S>>] {
@@ -1536,6 +1539,8 @@ function mountState<S>(
   ): any));
   return [hook.memoizedState, dispatch];
 }
+
+// API-hook:updateState
 function updateState<S>(
   initialState: (() => S) | S,
 ): [S, Dispatch<BasicStateAction<S>>] {
@@ -1548,7 +1553,7 @@ function rerenderState<S>(
   return rerenderReducer(basicStateReducer, (initialState: any));
 }
 
-// API-feature:pushEffect
+// API-hook:pushEffect
 function pushEffect(tag, create, destroy, deps) {
   // API-struct:effect，updateQueue.lastEffect环形链表，同update环形链表
   const effect: Effect = {
@@ -1596,7 +1601,7 @@ function getCallerStackFrame(): string {
     : stackFrames.slice(2, 3).join('\n');
 }
 
-// API-feature:mountRef
+// API-hook:mountRef
 function mountRef<T>(initialValue: T): {|current: T|} {
   const hook = mountWorkInProgressHook();
   if (enableUseRefAccessWarning) {
@@ -1670,7 +1675,7 @@ function updateRef<T>(initialValue: T): {|current: T|} {
   const hook = updateWorkInProgressHook();
   return hook.memoizedState;
 }
-// API-feature:mountEffect
+// API-hook:mountEffect
 function mountEffectImpl(fiberFlags, hookFlags, create, deps): void {
   const hook = mountWorkInProgressHook();
   const nextDeps = deps === undefined ? null : deps;
@@ -1900,7 +1905,7 @@ function updateCallback<T>(callback: T, deps: Array<mixed> | void | null): T {
   return callback;
 }
 
-// API-feature:mountMemo
+// API-hook:mountMemo
 function mountMemo<T>(
   nextCreate: () => T,
   deps: Array<mixed> | void | null,
@@ -1933,7 +1938,7 @@ function updateMemo<T>(
   return nextValue;
 }
 
-// API-feature:mountDeferredValue
+// API-hook:mountDeferredValue
 function mountDeferredValue<T>(value: T): T {
   const hook = mountWorkInProgressHook();
   hook.memoizedState = value;
@@ -2005,7 +2010,7 @@ function updateDeferredValueImpl<T>(hook: Hook, prevValue: T, value: T): T {
   }
 }
 
-// API-feature:startTransition
+// API-hook:startTransition
 function startTransition(setPending, callback, options) {
   const previousPriority = getCurrentUpdatePriority();
   setCurrentUpdatePriority(
@@ -2053,7 +2058,7 @@ function startTransition(setPending, callback, options) {
   }
 }
 
-// API-feature:mountTransition
+// API-hook:mountTransition
 function mountTransition(): [
   boolean,
   (callback: () => void, options?: StartTransitionOptions) => void,
