@@ -92,7 +92,7 @@ if (__DEV__) {
   };
 }
 
-// API-record:处理stringRef为callbackRef
+// API-record:处理stringRef为callbackRef，stringRef要求所在的组件为ClassComponent
 function coerceRef(
   returnFiber: Fiber,
   current: Fiber | null,
