@@ -90,6 +90,7 @@ export function getConcurrentlyUpdatedLanes(): Lanes {
   return concurrentlyUpdatedLanes;
 }
 
+// API-hookPhase:enqueueUpdate,会标记wip和current的lane
 function enqueueUpdate(
   fiber: Fiber,
   queue: ConcurrentQueue | null,
@@ -115,6 +116,7 @@ function enqueueUpdate(
   }
 }
 
+// API-hookPhase:enqueueConcurrentHookUpdate
 export function enqueueConcurrentHookUpdate<S, A>(
   fiber: Fiber,
   queue: HookQueue<S, A>,
@@ -127,6 +129,7 @@ export function enqueueConcurrentHookUpdate<S, A>(
   return getRootForUpdatedFiber(fiber);
 }
 
+// API-hookPhase:enqueueConcurrentHookUpdateAndEagerlyBailout
 export function enqueueConcurrentHookUpdateAndEagerlyBailout<S, A>(
   fiber: Fiber,
   queue: HookQueue<S, A>,
