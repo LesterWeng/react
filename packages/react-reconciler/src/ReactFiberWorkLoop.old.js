@@ -1908,7 +1908,7 @@ function renderRootConcurrent(root: FiberRoot, lanes: Lanes) {
   }
 }
 
-// API-render:workLoopConcurrent
+// API-render:workLoopConcurrent,shouldYield切片
 /** @noinline */
 function workLoopConcurrent() {
   // Perform work until Scheduler asks us to yield

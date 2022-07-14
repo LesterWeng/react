@@ -639,6 +639,7 @@ function cutOffTailIfNeeded(
     }
   }
 }
+// API-hookPhase:childLanes、subtreeFlags处理
 function bubbleProperties(completedWork: Fiber) {
   const didBailout =
     completedWork.alternate !== null &&
