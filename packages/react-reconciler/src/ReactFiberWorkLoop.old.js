@@ -607,7 +607,7 @@ function requestRetryLane(fiber: Fiber) {
   return claimNextRetryLane();
 }
 
-// API-triggerPhase:scheduleUpdateOnFiber
+// API-trigger:scheduleUpdateOnFiber
 export function scheduleUpdateOnFiber(
   root: FiberRoot,
   fiber: Fiber,
@@ -726,7 +726,7 @@ export function scheduleUpdateOnFiber(
       // scheduleCallbackForFiber to preserve the ability to schedule a callback
       // without immediately flushing it. We only do this for user-initiated
       // updates, to preserve historical behavior of legacy mode.
-      // API-triggerPhase:同步模式下，setTimeout等跳出React同步控制时，NoContext时立即调度
+      // API-trigger:同步模式下，setTimeout等跳出React同步控制时，NoContext时立即调度
       resetRenderTimer();
       flushSyncCallbacksOnlyInLegacyMode();
     }
@@ -770,7 +770,7 @@ export function isUnsafeClassRenderPhaseUpdate(fiber: Fiber) {
 // of the existing task is the same as the priority of the next level that the
 // root has work on. This function is called on every update, and right before
 // exiting a task.
-// API-triggerPhase:ensureRootIsScheduled
+// API-workloop:ensureRootIsScheduled，调度当优先级与callbackPriority一致时跳过
 function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
   const existingCallbackNode = root.callbackNode;
 
@@ -797,7 +797,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
   // We use the highest priority lane to represent the priority of the callback.
   const newCallbackPriority = getHighestPriorityLane(nextLanes);
 
-  // API-triggerPhase:多个同优先级task的情形,复用已存在的task
+  // API-workloop:callbackNode，已存在的回调priority和新回调优先级相同时，不再生成新的callbackNode
   // Check if there's an existing task. We may be able to reuse it.
   const existingCallbackPriority = root.callbackPriority;
   if (
@@ -906,6 +906,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
 
 // This is the entry point for every concurrent task, i.e. anything that
 // goes through Scheduler.
+// API-workloop:performConcurrentWorkOnRoot
 function performConcurrentWorkOnRoot(root, didTimeout) {
   if (enableProfilerTimer && enableProfilerNestedUpdatePhase) {
     resetNestedUpdateFlag();
@@ -1036,6 +1037,7 @@ function performConcurrentWorkOnRoot(root, didTimeout) {
   }
 
   ensureRootIsScheduled(root, now());
+  // API-workloop:callbackNode，ensureRootIsScheduled未生成新的callbackNode，继续之前的工作
   if (root.callbackNode === originalCallbackNode) {
     // The task node scheduled for this root is the same one that's
     // currently executed. Need to return a continuation.
@@ -1528,6 +1530,7 @@ export function getRenderLanes(): Lanes {
   return renderLanes;
 }
 
+// API-workloop:prepareFreshStack，生成rootFiber（就是最初的workInProgress）
 function prepareFreshStack(root: FiberRoot, lanes: Lanes): Fiber {
   root.finishedWork = null;
   root.finishedLanes = NoLanes;
@@ -1908,7 +1911,7 @@ function renderRootConcurrent(root: FiberRoot, lanes: Lanes) {
   }
 }
 
-// API-render:workLoopConcurrent,shouldYield切片
+// API-render:workLoopConcurrent，render级时间切片
 /** @noinline */
 function workLoopConcurrent() {
   // Perform work until Scheduler asks us to yield

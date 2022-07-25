@@ -190,7 +190,7 @@ function flushWork(hasTimeRemaining, initialTime) {
   }
 }
 
-// API-scheduler:workLoop，在这里时间切片打断render
+// API-scheduler:workLoop，任务级时间切片
 function workLoop(hasTimeRemaining, initialTime) {
   let currentTime = initialTime;
   advanceTimers(currentTime);
@@ -409,6 +409,7 @@ function unstable_getFirstCallbackNode() {
   return peek(taskQueue);
 }
 
+// API-scheduler:unstable_cancelCallback
 function unstable_cancelCallback(task) {
   if (enableProfiling) {
     if (task.isQueued) {

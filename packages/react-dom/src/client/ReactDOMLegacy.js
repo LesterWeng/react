@@ -200,7 +200,7 @@ function warnOnInvalidCallback(callback: mixed, callerName: string): void {
   }
 }
 
-// API-triggerPhase:legacyRenderSubtreeIntoContainer，会调用unbatchedUpdates
+// API-trigger:legacyRenderSubtreeIntoContainer，会调用unbatchedUpdates
 function legacyRenderSubtreeIntoContainer(
   parentComponent: ?React$Component<any, any>,
   children: ReactNodeList,

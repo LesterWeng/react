@@ -200,7 +200,7 @@ function applyDerivedStateFromProps(
 
 const classComponentUpdater = {
   isMounted,
-  // API-triggerPhase:this.setState调用, enqueueSetState
+  // API-trigger:this.setState调用, enqueueSetState
   enqueueSetState(inst, payload, callback) {
     const fiber = getInstance(inst);
     const eventTime = requestEventTime();

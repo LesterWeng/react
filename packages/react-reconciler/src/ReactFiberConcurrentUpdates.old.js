@@ -50,7 +50,7 @@ let concurrentQueuesIndex = 0;
 
 let concurrentlyUpdatedLanes: Lanes = NoLanes;
 
-// API-triggerPhase:包括了处理this.setState生成的shared.pending
+// API-trigger:finishQueueingConcurrentUpdates，包括了处理this.setState生成的shared.pending
 export function finishQueueingConcurrentUpdates(): void {
   const endIndex = concurrentQueuesIndex;
   concurrentQueuesIndex = 0;

@@ -244,7 +244,7 @@ function findHostInstanceWithWarning(
   return findHostInstance(component);
 }
 
-// API-triggerPhase:createContainer，创建FiberRootNode、RootFiber
+// API-trigger:createContainer，创建FiberRootNode、RootFiber
 export function createContainer(
   containerInfo: Container,
   tag: RootTag,
@@ -319,7 +319,7 @@ export function createHydrationContainer(
   return root;
 }
 
-// API-triggerPhase:updateContainer，基于container(FiberRootNode)开始调度更新
+// API-trigger:updateContainer，基于container(FiberRootNode)开始调度更新
 export function updateContainer(
   element: ReactNodeList,
   container: OpaqueRoot,
