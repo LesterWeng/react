@@ -3526,7 +3526,7 @@ function bailoutOnAlreadyFinishedWork(
     }
   }
 
-  // API-record:此时的current、wip的child均指向child wip，内部会复用child current来生成新fiber
+  // API-render:bailout命中后复制wip子树即可，不再根据child fiber生成新的wip fiber child
   // This fiber doesn't have work, but its subtree does. Clone the child
   // fibers and continue.
   cloneChildFibers(current, workInProgress);

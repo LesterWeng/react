@@ -1354,7 +1354,6 @@ function ChildReconciler(shouldTrackSideEffects) {
 
 export const reconcileChildFibers = ChildReconciler(true);
 export const mountChildFibers = ChildReconciler(false);
-// API-record:cloneChildFibers，复用
 export function cloneChildFibers(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -1369,7 +1368,6 @@ export function cloneChildFibers(
 
   let currentChild = workInProgress.child;
   let newChild = createWorkInProgress(currentChild, currentChild.pendingProps);
-  // API-record:切换workInProgress.child的wip为新child fiber
   workInProgress.child = newChild;
 
   newChild.return = workInProgress;

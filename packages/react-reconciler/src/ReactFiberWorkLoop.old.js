@@ -770,7 +770,7 @@ export function isUnsafeClassRenderPhaseUpdate(fiber: Fiber) {
 // of the existing task is the same as the priority of the next level that the
 // root has work on. This function is called on every update, and right before
 // exiting a task.
-// API-workloop:ensureRootIsScheduled，调度当优先级与callbackPriority一致时跳过
+// API-workloop:ensureRootIsScheduled，当优先级与callbackPriority一致时跳过
 function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
   const existingCallbackNode = root.callbackNode;
 
@@ -1530,7 +1530,8 @@ export function getRenderLanes(): Lanes {
   return renderLanes;
 }
 
-// API-workloop:prepareFreshStack，生成rootFiber（就是最初的workInProgress）
+// API-workloop:prepareFreshStack，初始化和更新时都会调用
+// 根据当前rootFiber生成wipRootFiber，其child复制于rootFiber，所以低优先级task被打断后再次继续时之前的已进行了的render工作就无效了
 function prepareFreshStack(root: FiberRoot, lanes: Lanes): Fiber {
   root.finishedWork = null;
   root.finishedLanes = NoLanes;

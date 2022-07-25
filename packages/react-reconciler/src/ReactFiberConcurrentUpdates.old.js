@@ -81,6 +81,7 @@ export function finishQueueingConcurrentUpdates(): void {
     }
 
     if (lane !== NoLane) {
+      // API-workloop:从fiber到root打上lane标记
       markUpdateLaneFromFiberToRoot(fiber, update, lane);
     }
   }
@@ -180,6 +181,7 @@ export function unsafe_markUpdateLaneFromFiberToRoot(
   return root;
 }
 
+// API-workloop:markUpdateLaneFromFiberToRoot
 function markUpdateLaneFromFiberToRoot(
   sourceFiber: Fiber,
   update: ConcurrentUpdate | null,
