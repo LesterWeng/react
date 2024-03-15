@@ -146,6 +146,7 @@ function warnIfStringRefCannotBeAutoConverted(config) {
  * @internal
  */
 const ReactElement = function(type, key, ref, self, source, owner, props) {
+  // API-struct:ReactElement
   const element = {
     // This tag allows us to uniquely identify this as a React Element
     $$typeof: REACT_ELEMENT_TYPE,

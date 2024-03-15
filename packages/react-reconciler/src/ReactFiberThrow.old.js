@@ -369,7 +369,7 @@ function throwException(
     }
   }
 
-  // API-record:抛出的thenable类型（Suspense子组件内）特殊处理
+  // API-workloop:抛出的thenable类型（Suspense子组件内）特殊处理
   if (
     value !== null &&
     typeof value === 'object' &&
